@@ -52,26 +52,26 @@ func NewRestClient(ctx context.Context, keyConfig KeyConfig, env Destination) *R
 func (c KeyConfig) makeHeader(method, requestPath string, body []byte) http.Header {
 	sign, now := c.makeSign(method, requestPath, body)
 	return map[string][]string{
-		"OK-ACCESS-KEY":        {c.apikey},
+		"OK-ACCESS-KEY":        {c.Apikey},
 		"OK-ACCESS-SIGN":       {sign},
 		"OK-ACCESS-TIMESTAMP":  {now},
-		"OK-ACCESS-PASSPHRASE": {c.passphrase},
+		"OK-ACCESS-PASSPHRASE": {c.Passphrase},
 	}
 }
 
 func (c KeyConfig) makeWsSign() map[string]string {
 	sign, now := c.makeSign("GET", "/users/self/verify", []byte(""))
 	return map[string]string{
-		"OK-ACCESS-KEY":        c.apikey,
+		"OK-ACCESS-KEY":        c.Apikey,
 		"OK-ACCESS-SIGN":       sign,
 		"OK-ACCESS-TIMESTAMP":  now,
-		"OK-ACCESS-PASSPHRASE": c.passphrase,
+		"OK-ACCESS-PASSPHRASE": c.Passphrase,
 	}
 }
 func (c KeyConfig) makeSign(method, requestPath string, body []byte) (sign string, now string) {
 	method = strings.ToUpper(method)
 	now = time.Now().Format(time.RFC3339)
-	hash := hmac.New(sha256.New, []byte(c.secretkey))
+	hash := hmac.New(sha256.New, []byte(c.Secretkey))
 	hash.Write(append([]byte(now+method+requestPath), body...))
 	return hex.EncodeToString(hash.Sum(nil)), now
 }
