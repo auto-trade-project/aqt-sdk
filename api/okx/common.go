@@ -54,6 +54,11 @@ func (m *RawMessage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type KeyConfig struct {
+	Apikey     string
+	Secretkey  string
+	Passphrase string
+}
 type SubChannel struct {
 	Channel string `json:"channel"`
 	InstId  string `json:"instId"`

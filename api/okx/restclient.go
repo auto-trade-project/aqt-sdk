@@ -13,12 +13,6 @@ import (
 	"time"
 )
 
-type KeyConfig struct {
-	apikey     string
-	secretkey  string
-	passphrase string
-}
-
 type RestClient struct {
 	baseUrl   BaseURL
 	ctx       context.Context
