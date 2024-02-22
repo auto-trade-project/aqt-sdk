@@ -85,7 +85,7 @@ func (c RestClient) makeGet(ctx context.Context, url string, params interface{})
 	return c.makeRequest(ctx, "GET", url, params)
 }
 func (c RestClient) makePost(ctx context.Context, url string, params interface{}) *http.Request {
-	return c.makeRequest(ctx, "Post", url, params)
+	return c.makeRequest(ctx, "POST", url, params)
 }
 func (c RestClient) makeRequest(ctx context.Context, method, url string, params interface{}) *http.Request {
 	bs, _ := json.Marshal(params)
