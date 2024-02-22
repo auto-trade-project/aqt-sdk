@@ -1,4 +1,4 @@
-module aqt-sdk
+module github.com/kurosann/aqt-sdk
 
 go 1.21
 
