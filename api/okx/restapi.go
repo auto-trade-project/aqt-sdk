@@ -9,7 +9,7 @@ func (c RestClient) PlaceOrder(ctx context.Context, req PlaceOrder) (*http.Respo
 	return c.client.Do(c.makePost(ctx, "/api/v5/trade/order", req))
 }
 func (c RestClient) Instruments(ctx context.Context, instType string) (*http.Response, error) {
-	return c.client.Do(c.makePost(ctx, "/api/v5/trade/order", map[string]interface{}{
+	return c.client.Do(c.makeGet(ctx, "/api/v5/public/instruments", map[string]interface{}{
 		"instType": instType,
 	}))
 }

@@ -2,6 +2,7 @@ package okx
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"testing"
 
@@ -25,4 +26,5 @@ func TestNewRestClient(t *testing.T) {
 		return
 	}
 	assert.Equal(t, rp.StatusCode, 200, string(bs))
+	fmt.Println(string(bs))
 }
