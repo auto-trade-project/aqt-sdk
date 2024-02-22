@@ -2,28 +2,27 @@ package okx
 
 import (
 	"context"
-	"reflect"
+	"io"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewRestClient(t *testing.T) {
-	type args struct {
-		ctx       context.Context
-		keyConfig KeyConfig
-		env       Destination
+	client := NewRestClient(context.Background(), KeyConfig{
+		"",
+		"",
+		"",
+	}, TestServer)
+	rp, err := client.Instruments(context.Background(), "SPOT")
+	if err != nil {
+		assert.Fail(t, err.Error())
+		return
 	}
-	tests := []struct {
-		name string
-		args args
-		want *RestClient
-	}{
-		// TODO: Add test cases.
+	bs, err := io.ReadAll(rp.Body)
+	if err != nil {
+		assert.Fail(t, err.Error())
+		return
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := NewRestClient(tt.args.ctx, tt.args.keyConfig, tt.args.env); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewRestClient() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	assert.Equal(t, rp.StatusCode, 200, string(bs))
 }

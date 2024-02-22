@@ -28,9 +28,10 @@ type WsClient struct {
 	passphrase string
 	l          sync.RWMutex
 	chanMap    map[string]chan *WsResp
+	keyConfig  KeyConfig
 }
 
-func NewWsClient(ctx context.Context, apikey, secretkey, passphrase string, env Destination) *WsClient {
+func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination) *WsClient {
 	urls := map[SvcType]BaseURL{}
 	switch env {
 	case NormalServer:
@@ -44,14 +45,12 @@ func NewWsClient(ctx context.Context, apikey, secretkey, passphrase string, env 
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &WsClient{
-		ctx:        ctx,
-		cancel:     cancel,
-		urls:       urls,
-		apikey:     apikey,
-		secretkey:  secretkey,
-		passphrase: passphrase,
-		conns:      map[SvcType]*websocket.Conn{},
-		chanMap:    make(map[string]chan *WsResp),
+		ctx:       ctx,
+		cancel:    cancel,
+		urls:      urls,
+		keyConfig: keyConfig,
+		conns:     map[SvcType]*websocket.Conn{},
+		chanMap:   make(map[string]chan *WsResp),
 	}
 }
 func connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
