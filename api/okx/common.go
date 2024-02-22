@@ -74,6 +74,8 @@ type Op struct {
 type WsResp struct {
 	Event  string `json:"event"`
 	ConnId string `json:"connId"`
+	Code   string `json:"code"`
+	Msg    string `json:"msg"`
 	Arg    struct {
 		Channel string `json:"channel"`
 		InstId  string `json:"instId"`
