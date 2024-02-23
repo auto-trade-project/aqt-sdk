@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"time"
 
@@ -158,15 +159,28 @@ func (w *WsClient) Subscribe(arg Arg, typ SvcType) (<-chan *WsResp, error) {
 	if err != nil {
 		return nil, err
 	}
+	valueOfArg := reflect.ValueOf(arg)
+	channel := ""
+	for i := 0; i < valueOfArg.NumField(); i++ {
+		field := valueOfArg.Field(i)
+		channel += field.String()
+	}
 	respCh := make(chan *WsResp)
-	if respCh, ok := w.RegCh(arg.Channel+arg.InstId, respCh); ok {
+	if respCh, ok := w.RegCh(channel, respCh); ok {
 		return respCh, nil
 	}
 	return respCh, nil
 }
+
 // UnSubscribe channel要与 Subscribe 的channel对应上 否则无法关闭chan
 func (w *WsClient) UnSubscribe(arg Arg, typ SvcType) error {
-	w.UnRegCh(arg.Channel+arg.InstId)
+	valueOfArg := reflect.ValueOf(arg)
+	channel := ""
+	for i := 0; i < valueOfArg.NumMethod(); i++ {
+		field := valueOfArg.Field(i)
+		channel += field.String()
+	}
+	w.UnRegCh(channel)
 	return w.Send(typ, Op{
 		Op:   "unsubscribe",
 		Args: []Arg{arg},

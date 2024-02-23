@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -19,8 +20,8 @@ func TestNewWsClient(t *testing.T) {
 		},
 		TestServer,
 	)
-	group := sync.WaitGroup{}
-	group.Add(10)
+	count := 10
+	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
 		ch, err := client.MarkPriceCandlesticks("mark-price-candle1M", "BTC-USDT")
 		if err != nil {
@@ -33,7 +34,10 @@ func TestNewWsClient(t *testing.T) {
 				return
 			}
 			fmt.Println(*resp)
-			group.Done()
+			cond.L.Lock()
+			count--
+			cond.Broadcast()
+			cond.L.Unlock()
 		}
 	}()
 	go func() {
@@ -48,8 +52,25 @@ func TestNewWsClient(t *testing.T) {
 				return
 			}
 			fmt.Println(*resp)
-			group.Done()
+			cond.L.Lock()
+			count--
+			cond.Broadcast()
+			cond.L.Unlock()
 		}
 	}()
-	group.Wait()
+	isFailed := false
+	go func() {
+		<-time.After(time.Second * 10)
+
+		cond.L.Lock()
+		isFailed = true
+		cond.Broadcast()
+		cond.L.Unlock()
+	}()
+	cond.L.Lock()
+	for count != 0 && !isFailed {
+		cond.Wait()
+	}
+	cond.L.Unlock()
+	assert.Equal(t, count, 0)
 }

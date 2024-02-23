@@ -75,11 +75,11 @@ func (c KeyConfig) makeSign(method, requestPath string, body []byte) (sign strin
 	hash.Write(append([]byte(now+method+requestPath), body...))
 	return hex.EncodeToString(hash.Sum(nil)), now
 }
-func (c RestClient) makeGet(ctx context.Context, url string, params interface{}) *http.Request {
-	return c.makeRequest(ctx, "GET", url, params)
+func (c RestClient) Get(ctx context.Context, url string, params interface{}) (*http.Response, error) {
+	return c.client.Do(c.makeRequest(ctx, "GET", url, params))
 }
-func (c RestClient) makePost(ctx context.Context, url string, params interface{}) *http.Request {
-	return c.makeRequest(ctx, "POST", url, params)
+func (c RestClient) Post(ctx context.Context, url string, params interface{}) (*http.Response, error) {
+	return c.client.Do(c.makeRequest(ctx, "POST", url, params))
 }
 func (c RestClient) makeRequest(ctx context.Context, method, url string, params interface{}) *http.Request {
 	bs, _ := json.Marshal(params)
