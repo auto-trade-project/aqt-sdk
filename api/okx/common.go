@@ -31,6 +31,31 @@ const (
 	TestBusinessWsURL = BaseURL("wss://wspap.okx.com:8443/ws/v5/business?brokerId=9999")
 )
 
+var (
+	DefaultWsUrls = map[Destination]map[SvcType]BaseURL{
+		NormalServer: {
+			Public:   PublicWsURL,
+			Private:  PrivateWsURL,
+			Business: BusinessWsURL,
+		},
+		AwsServer: {
+			Public:   AwsPublicWsURL,
+			Private:  AwsPrivateWsURL,
+			Business: AwsBusinessWsURL,
+		},
+		TestServer: {
+			Public:   TestPublicWsURL,
+			Private:  TestPrivateWsURL,
+			Business: TestBusinessWsURL,
+		},
+	}
+	DefaultRestUrl = map[Destination]BaseURL{
+		NormalServer: RestURL,
+		AwsServer:    AwsRestURL,
+		TestServer:   TestRestURL,
+	}
+)
+
 type RawMessage []byte
 
 func (r RawMessage) String() string {
@@ -76,15 +101,15 @@ type Arg struct {
 }
 type Op struct {
 	Op   string `json:"op"`
-	Args []Arg `json:"args"`
+	Args []Arg  `json:"args"`
 }
 type WsResp struct {
-	Event  string `json:"event"`
-	ConnId string `json:"connId"`
-	Code   string `json:"code"`
-	Msg    string `json:"msg"`
-	Arg    Arg `json:"arg"`
-	Data RawMessage `json:"data"`
+	Event  string     `json:"event"`
+	ConnId string     `json:"connId"`
+	Code   string     `json:"code"`
+	Msg    string     `json:"msg"`
+	Arg    Arg        `json:"arg"`
+	Data   RawMessage `json:"data"`
 }
 type PlaceOrder struct {
 	ID         string  `json:"-"`

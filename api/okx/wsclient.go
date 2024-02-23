@@ -33,22 +33,15 @@ type WsClient struct {
 }
 
 func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination) *WsClient {
-	urls := map[SvcType]BaseURL{}
-	switch env {
-	case NormalServer:
-		urls[Public], urls[Private], urls[Business] = PublicWsURL, PrivateWsURL, BusinessWsURL
-	case AwsServer:
-		urls[Public], urls[Private], urls[Business] = AwsPublicWsURL, AwsPrivateWsURL, AwsBusinessWsURL
-	case TestServer:
-		urls[Public], urls[Private], urls[Business] = TestPublicWsURL, TestPrivateWsURL, TestBusinessWsURL
-	default:
-		panic("not support env")
-	}
+	return NewWsClientWithCustom(ctx, keyConfig, env, DefaultWsUrls)
+}
+
+func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]map[SvcType]BaseURL) *WsClient {
 	ctx, cancel := context.WithCancel(ctx)
 	return &WsClient{
 		ctx:       ctx,
 		cancel:    cancel,
-		urls:      urls,
+		urls:      urls[env],
 		keyConfig: keyConfig,
 		conns:     map[SvcType]*websocket.Conn{},
 		chanMap:   make(map[string]chan *WsResp),

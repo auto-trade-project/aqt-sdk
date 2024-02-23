@@ -23,22 +23,19 @@ type RestClient struct {
 }
 
 func NewRestClient(ctx context.Context, keyConfig KeyConfig, env Destination) *RestClient {
-	var baseUrl BaseURL
-	switch env {
-	case NormalServer:
-		baseUrl = RestURL
-	case AwsServer:
-		baseUrl = AwsRestURL
-	case TestServer:
-		baseUrl = TestRestURL
-	default:
+	return NewRestClientWithCustom(ctx, keyConfig, env, DefaultRestUrl)
+}
+
+func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]BaseURL) *RestClient {
+	ctx, cancel := context.WithCancel(ctx)
+	url, ok := DefaultRestUrl[env]
+	if !ok {
 		panic("not support env")
 	}
-	ctx, cancel := context.WithCancel(ctx)
 	return &RestClient{
 		ctx:       ctx,
 		cancel:    cancel,
-		baseUrl:   baseUrl,
+		baseUrl:   url,
 		keyConfig: keyConfig,
 		isTest:    env == TestServer,
 		client: &http.Client{
