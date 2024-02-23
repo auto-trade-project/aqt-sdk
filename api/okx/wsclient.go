@@ -64,7 +64,7 @@ func process(conn *websocket.Conn) {
 	for {
 		select {
 		case <-timer.C:
-			err := conn.WriteMessage(websocket.TextMessage, []byte("pong"))
+			err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
 			if err != nil {
 				return
 			}
@@ -92,16 +92,36 @@ func (w *WsClient) push(channel string, resp *WsResp) {
 	w.l.RLock()
 	defer w.l.RUnlock()
 	if ch, ok := w.chanMap[channel]; ok {
-		ch <- resp
+		select {
+		case ch <- resp:
+		case <-time.After(time.Second * 3):
+			fmt.Printf("ignore data: %v\n", resp)
+		}
+	} else {
+		fmt.Printf("ignore data: %v\n", resp)
 	}
 }
 
-func (w *WsClient) RegCh(channel string, f chan *WsResp) {
+func (w *WsClient) RegCh(channel string, f chan *WsResp) (chan *WsResp, bool) {
 	w.l.Lock()
 	defer w.l.Unlock()
 
-	w.chanMap[channel] = f
+	if ch, ok := w.chanMap[channel]; ok {
+		return ch, true
+	} else {
+		w.chanMap[channel] = f
+	}
+	return w.chanMap[channel], false
 }
+func (w *WsClient) GetCh(channel string) (chan *WsResp, bool) {
+	w.l.Lock()
+	defer w.l.Unlock()
+	if respCh, ok := w.chanMap[channel]; ok {
+		return respCh, ok
+	}
+	return nil, false
+}
+
 func (w *WsClient) UnRegCh(channel string) {
 	w.l.Lock()
 	defer w.l.Unlock()
@@ -117,29 +137,38 @@ func (w *WsClient) process(conn *websocket.Conn) {
 		if err != nil {
 			return
 		}
-		w.push(v.Arg.Channel, v)
+		w.push(v.Arg.Channel+v.Arg.InstId, v)
 	}
 }
 
-func (w *WsClient) Send(channel string, typ SvcType, req any) (<-chan *WsResp, error) {
+func (w *WsClient) Send(typ SvcType, req any) error {
 	conn, err := w.lazyConnect(typ)
+	if err != nil {
+		return err
+	}
+	return conn.WriteJSON(req)
+}
+
+// Subscribe channel要与 UnSubscribe 的channel对应上 否则无法关闭chan
+func (w *WsClient) Subscribe(arg Arg, typ SvcType) (<-chan *WsResp, error) {
+	err := w.Send(typ, Op{
+		Op:   "subscribe",
+		Args: []Arg{arg},
+	})
 	if err != nil {
 		return nil, err
 	}
 	respCh := make(chan *WsResp)
-	w.RegCh(channel, respCh)
-	defer func() {
-		if err != nil {
-			w.UnRegCh(channel)
-		}
-	}()
-	err = conn.WriteJSON(req)
-	return respCh, err
+	if respCh, ok := w.RegCh(arg.Channel+arg.InstId, respCh); ok {
+		return respCh, nil
+	}
+	return respCh, nil
 }
-
-func (w *WsClient) Subscribe(channel, InstId string, typ SvcType) (<-chan *WsResp, error) {
-	return w.Send(channel, typ, makeSubscribeOp(channel, InstId))
-}
-func (w *WsClient) UnSubscribe(channel, InstId string, typ SvcType) (<-chan *WsResp, error) {
-	return w.Send(channel, typ, makeUnSubscribeOp(channel, InstId))
+// UnSubscribe channel要与 Subscribe 的channel对应上 否则无法关闭chan
+func (w *WsClient) UnSubscribe(arg Arg, typ SvcType) error {
+	w.UnRegCh(arg.Channel+arg.InstId)
+	return w.Send(typ, Op{
+		Op:   "unsubscribe",
+		Args: []Arg{arg},
+	})
 }

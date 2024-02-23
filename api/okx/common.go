@@ -33,6 +33,9 @@ const (
 
 type RawMessage []byte
 
+func (r RawMessage) String() string {
+	return string(r)
+}
 func (r RawMessage) Unmarshal(any any) error {
 	return json.Unmarshal(r, any)
 }
@@ -67,19 +70,20 @@ type UnSubChannel struct {
 	Channel string `json:"channel"`
 	InstId  string `json:"instId"`
 }
+type Arg struct {
+	Channel string `json:"channel"`
+	InstId  string `json:"instId"`
+}
 type Op struct {
 	Op   string `json:"op"`
-	Args any    `json:"args"`
+	Args []Arg `json:"args"`
 }
 type WsResp struct {
 	Event  string `json:"event"`
 	ConnId string `json:"connId"`
 	Code   string `json:"code"`
 	Msg    string `json:"msg"`
-	Arg    struct {
-		Channel string `json:"channel"`
-		InstId  string `json:"instId"`
-	} `json:"arg"`
+	Arg    Arg `json:"arg"`
 	Data RawMessage `json:"data"`
 }
 type PlaceOrder struct {
@@ -98,19 +102,13 @@ type PlaceOrder struct {
 	TgtCcy     string  `json:"tgtCcy,omitempty"`
 }
 
-func makeSubscribeOp(channel, InstId string) Op {
-	return makeOp("subscribe", []SubChannel{{
+func makeArg(channel, InstId string) Arg {
+	return Arg{
 		Channel: channel,
 		InstId:  InstId,
-	}})
+	}
 }
-func makeUnSubscribeOp(channel, InstId string) Op {
-	return makeOp("unsubscribe", []UnSubChannel{{
-		Channel: channel,
-		InstId:  InstId,
-	}})
-}
-func makeOp(op string, args any) Op {
+func makeOp(op string, args []Arg) Op {
 	return Op{
 		Op:   op,
 		Args: args,
