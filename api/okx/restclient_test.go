@@ -60,7 +60,7 @@ func TestGetCandlesticks(t *testing.T) {
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()
 	rp, err := client.Candles(
 		context.Background(),
-		&CandlesticksReq{
+		CandlesticksReq{
 			InstID: "BTC-USDT",
 			After:  time.Now().UnixMilli(),
 			Before: startTime,

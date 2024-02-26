@@ -13,9 +13,9 @@ func (c RestClient) Instruments(ctx context.Context, req InstrumentsReq) (*Resp[
 func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req HistoryMarkPriceCandlesReq) (*Resp[Price], error) {
 	return Get[Price](c, ctx, "/api/v5/market/history-mark-price-candles", req)
 }
-func (c RestClient) TakerVolume(ctx context.Context, req *TakerVolumeReq) (*Resp[TakerVolume], error) {
+func (c RestClient) TakerVolume(ctx context.Context, req TakerVolumeReq) (*Resp[TakerVolume], error) {
 	return Get[TakerVolume](c, ctx, "/api/v5/rubik/stat/taker-volume", req)
 }
-func (c RestClient) Candles(ctx context.Context, req *CandlesticksReq) (*Resp[Candle], error) {
+func (c RestClient) Candles(ctx context.Context, req CandlesticksReq) (*Resp[Candle], error) {
 	return Get[Candle](c, ctx, "/api/v5/market/candles", req)
 }
