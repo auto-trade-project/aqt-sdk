@@ -21,16 +21,19 @@ const (
 )
 
 type WsClient struct {
-	ctx        context.Context
-	cancel     func()
-	urls       map[SvcType]BaseURL
-	conns      map[SvcType]*websocket.Conn
-	apikey     string
-	secretkey  string
-	passphrase string
-	l          sync.RWMutex
-	chanMap    map[string]chan *WsResp
-	keyConfig  KeyConfig
+	ctx                 context.Context
+	cancel              func()
+	urls                map[SvcType]BaseURL
+	conns               map[SvcType]*websocket.Conn
+	apikey              string
+	secretkey           string
+	passphrase          string
+	SubscribeCallback   func()
+	UnSubscribeCallback func()
+	l                   sync.RWMutex
+	subscribeKey        map[string]*Arg
+	chanMap             map[string]chan *WsResp
+	keyConfig           KeyConfig
 }
 
 func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination) *WsClient {
@@ -97,14 +100,14 @@ func (w *WsClient) push(channel string, resp *WsResp) {
 	}
 }
 
-func (w *WsClient) RegCh(channel string, f chan *WsResp) (chan *WsResp, bool) {
+func (w *WsClient) RegCh(channel string, c chan *WsResp) (chan *WsResp, bool) {
 	w.l.Lock()
 	defer w.l.Unlock()
 
 	if ch, ok := w.chanMap[channel]; ok {
 		return ch, true
 	} else {
-		w.chanMap[channel] = f
+		w.chanMap[channel] = c
 	}
 	return w.chanMap[channel], false
 }
@@ -120,6 +123,7 @@ func (w *WsClient) GetCh(channel string) (chan *WsResp, bool) {
 func (w *WsClient) UnRegCh(channel string) {
 	w.l.Lock()
 	defer w.l.Unlock()
+
 	if respCh, ok := w.chanMap[channel]; ok {
 		close(respCh)
 		delete(w.chanMap, channel)
@@ -132,7 +136,30 @@ func (w *WsClient) process(conn *websocket.Conn) {
 		if err != nil {
 			return
 		}
-		w.push(v.Arg.Channel+v.Arg.InstId, v)
+
+		valueOfArg := reflect.ValueOf(v.Arg)
+		var channel []string
+		for i := 0; i < valueOfArg.NumField(); i++ {
+			field := valueOfArg.Field(i)
+			channel = append(channel, field.String())
+		}
+		if v.Event == "unsubscribe" {
+			if w.UnSubscribeCallback != nil {
+				w.UnSubscribeCallback()
+			}
+			w.UnRegCh(strings.Join(channel, "-"))
+			continue
+		} else if v.Event == "subscribe" {
+			if w.SubscribeCallback != nil {
+				w.SubscribeCallback()
+			}
+			continue
+		}
+		if v.Data == nil {
+			fmt.Printf("ignore data: %v\n", v)
+			continue
+		}
+		w.push(strings.Join(channel, "-"), v)
 	}
 }
 
@@ -144,14 +171,14 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	return conn.WriteJSON(req)
 }
 
-func (w *WsClient) Subscribe(arg Arg, typ SvcType) (<-chan *WsResp, error) {
+func (w *WsClient) Subscribe(arg *Arg, typ SvcType) (<-chan *WsResp, error) {
 	if err := w.Send(typ, Op{
 		Op:   "subscribe",
-		Args: []Arg{arg},
+		Args: []*Arg{arg},
 	}); err != nil {
 		return nil, err
 	}
-	valueOfArg := reflect.ValueOf(arg)
+	valueOfArg := reflect.ValueOf(arg).Elem()
 	var channel []string
 	for i := 0; i < valueOfArg.NumField(); i++ {
 		field := valueOfArg.Field(i)
@@ -164,16 +191,9 @@ func (w *WsClient) Subscribe(arg Arg, typ SvcType) (<-chan *WsResp, error) {
 	return respCh, nil
 }
 
-func (w *WsClient) UnSubscribe(arg Arg, typ SvcType) error {
-	valueOfArg := reflect.ValueOf(arg)
-	var channel []string
-	for i := 0; i < valueOfArg.NumField(); i++ {
-		field := valueOfArg.Field(i)
-		channel = append(channel, field.String())
-	}
-	w.UnRegCh(strings.Join(channel, "-"))
+func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
 	return w.Send(typ, Op{
 		Op:   "unsubscribe",
-		Args: []Arg{arg},
+		Args: []*Arg{arg},
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ func NewRestClient(ctx context.Context, keyConfig KeyConfig, env Destination) *R
 
 func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]BaseURL) *RestClient {
 	ctx, cancel := context.WithCancel(ctx)
-	url, ok := DefaultRestUrl[env]
+	url, ok := urls[env]
 	if !ok {
 		panic("not support env")
 	}
@@ -67,16 +68,38 @@ func (c KeyConfig) makeWsSign() map[string]string {
 }
 func (c KeyConfig) makeSign(method, requestPath string, body []byte) (sign string, now string) {
 	method = strings.ToUpper(method)
-	now = time.Now().Format(time.RFC3339)
+	now = time.Now().Format("2006-01-02T15:04:05.999Z")
 	hash := hmac.New(sha256.New, []byte(c.Secretkey))
 	hash.Write(append([]byte(now+method+requestPath), body...))
 	return hex.EncodeToString(hash.Sum(nil)), now
 }
-func (c RestClient) Get(ctx context.Context, url string, params interface{}) (*http.Response, error) {
-	return c.client.Do(c.makeRequest(ctx, "GET", url, params))
+func (c RestClient) Get(ctx context.Context, url string, params interface{}) ([]byte, error) {
+	rp, err := c.client.Do(c.makeRequest(ctx, "GET", url, params))
+	if err != nil {
+		return nil, err
+	}
+	bs, err := io.ReadAll(rp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if rp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("StatusCode is %v, msg: %v", rp.StatusCode, string(bs))
+	}
+	return bs, err
 }
-func (c RestClient) Post(ctx context.Context, url string, params interface{}) (*http.Response, error) {
-	return c.client.Do(c.makeRequest(ctx, "POST", url, params))
+func (c RestClient) Post(ctx context.Context, url string, params interface{}) ([]byte, error) {
+	rp, err := c.client.Do(c.makeRequest(ctx, "POST", url, params))
+	if err != nil {
+		return nil, err
+	}
+	bs, err := io.ReadAll(rp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if rp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("StatusCode is %v, msg: %v", rp.StatusCode, string(bs))
+	}
+	return bs, err
 }
 func (c RestClient) makeRequest(ctx context.Context, method, url string, params interface{}) *http.Request {
 	bs, _ := json.Marshal(params)
