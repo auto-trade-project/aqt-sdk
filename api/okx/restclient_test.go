@@ -14,7 +14,9 @@ func TestNewRestClient(t *testing.T) {
 		"",
 		"",
 	}, TestServer)
-	rp, err := client.Instruments(context.Background(), "SPOT")
+	rp, err := client.Instruments(context.Background(), InstrumentsReq{
+		InstType: "SPOT",
+	})
 	if err != nil {
 		assert.Fail(t, err.Error())
 		return

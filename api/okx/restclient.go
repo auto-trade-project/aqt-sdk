@@ -73,8 +73,14 @@ func (c KeyConfig) makeSign(method, requestPath string, body []byte) (sign strin
 	hash.Write(append([]byte(now+method+requestPath), body...))
 	return hex.EncodeToString(hash.Sum(nil)), now
 }
-func (c RestClient) Get(ctx context.Context, url string, params interface{}) ([]byte, error) {
-	rp, err := c.client.Do(c.makeRequest(ctx, "GET", url, params))
+func Get[T any](c RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
+	return Do[T](c, c.MakeRequest(ctx, "GET", url, params))
+}
+func Post[T any](c RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
+	return Do[T](c, c.MakeRequest(ctx, "POST", url, params))
+}
+func Do[T any](c RestClient, req *http.Request) (*Resp[T], error) {
+	rp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -83,25 +89,18 @@ func (c RestClient) Get(ctx context.Context, url string, params interface{}) ([]
 		return nil, err
 	}
 	if rp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("StatusCode is %v, msg: %v", rp.StatusCode, string(bs))
+		return nil, fmt.Errorf("%v %v, statusCode is %v, msg: %v", req.Method, req.URL.String(), rp.StatusCode, string(bs))
 	}
-	return bs, err
-}
-func (c RestClient) Post(ctx context.Context, url string, params interface{}) ([]byte, error) {
-	rp, err := c.client.Do(c.makeRequest(ctx, "POST", url, params))
+	t, err := unmarshal[Resp[T]](bs)
 	if err != nil {
 		return nil, err
 	}
-	bs, err := io.ReadAll(rp.Body)
-	if err != nil {
-		return nil, err
+	if t.Code != "0" {
+		return nil, fmt.Errorf(t.Msg)
 	}
-	if rp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("StatusCode is %v, msg: %v", rp.StatusCode, string(bs))
-	}
-	return bs, err
+	return t, nil
 }
-func (c RestClient) makeRequest(ctx context.Context, method, url string, params interface{}) *http.Request {
+func (c RestClient) MakeRequest(ctx context.Context, method, url string, params interface{}) *http.Request {
 	bs, _ := json.Marshal(params)
 	uri := ""
 	if method == http.MethodGet {

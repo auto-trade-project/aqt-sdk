@@ -127,6 +127,12 @@ type PlaceOrderReq struct {
 	OrdType    string  `json:"ordType"`
 	TgtCcy     string  `json:"tgtCcy,omitempty"`
 }
+type InstrumentsReq struct {
+	InstType   string `json:"instType"`
+	Uly        string `json:"uly"`
+	InstFamily string `json:"instFamily"`
+	InstId     string `json:"instId"`
+}
 type Candles struct {
 	InstId string `json:"instId"`
 	Bar    string `json:"bar"`
