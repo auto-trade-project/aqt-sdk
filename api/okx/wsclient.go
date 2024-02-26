@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -143,37 +144,34 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	return conn.WriteJSON(req)
 }
 
-// Subscribe channel要与 UnSubscribe 的channel对应上 否则无法关闭chan
 func (w *WsClient) Subscribe(arg Arg, typ SvcType) (<-chan *WsResp, error) {
-	err := w.Send(typ, Op{
+	if err := w.Send(typ, Op{
 		Op:   "subscribe",
 		Args: []Arg{arg},
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 	valueOfArg := reflect.ValueOf(arg)
-	channel := ""
+	var channel []string
 	for i := 0; i < valueOfArg.NumField(); i++ {
 		field := valueOfArg.Field(i)
-		channel += field.String()
+		channel = append(channel, field.String())
 	}
 	respCh := make(chan *WsResp)
-	if respCh, ok := w.RegCh(channel, respCh); ok {
+	if respCh, isExist := w.RegCh(strings.Join(channel, "-"), respCh); isExist {
 		return respCh, nil
 	}
 	return respCh, nil
 }
 
-// UnSubscribe channel要与 Subscribe 的channel对应上 否则无法关闭chan
 func (w *WsClient) UnSubscribe(arg Arg, typ SvcType) error {
 	valueOfArg := reflect.ValueOf(arg)
-	channel := ""
-	for i := 0; i < valueOfArg.NumMethod(); i++ {
+	var channel []string
+	for i := 0; i < valueOfArg.NumField(); i++ {
 		field := valueOfArg.Field(i)
-		channel += field.String()
+		channel = append(channel, field.String())
 	}
-	w.UnRegCh(channel)
+	w.UnRegCh(strings.Join(channel, "-"))
 	return w.Send(typ, Op{
 		Op:   "unsubscribe",
 		Args: []Arg{arg},

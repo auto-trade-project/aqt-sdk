@@ -11,8 +11,8 @@ import (
 
 func TestNewRestClient(t *testing.T) {
 	client := NewRestClient(context.Background(), KeyConfig{
-		"bf8723fa-3070-46b8-b964-2f68c0a9320c",
-		"7EA20DF3B56F713E00E43EF84E910CD3",
+		"",
+		"",
 		"",
 	}, TestServer)
 	rp, err := client.Instruments(context.Background(), "SPOT")
