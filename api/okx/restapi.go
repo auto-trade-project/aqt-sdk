@@ -16,3 +16,11 @@ func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req *Candles) (
 func (c RestClient) TakerVolume(ctx context.Context, req *TakerVolumeReq) (*Resp[TakerVolume], error) {
 	return Get[TakerVolume](c, ctx, "/api/v5/rubik/stat/taker-volume", req)
 }
+
+func (c RestClient) GetCandlesticks(ctx context.Context, req *GetCandlesticks) (*Resp[Candle], error) {
+	data, err := c.Get(ctx, "/api/v5/market/candles", req)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshal[Resp[Candle]](data)
+}
