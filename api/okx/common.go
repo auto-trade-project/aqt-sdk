@@ -133,12 +133,12 @@ type InstrumentsReq struct {
 	InstFamily string `json:"instFamily"`
 	InstId     string `json:"instId"`
 }
-type Candles struct {
-	InstId string `json:"instId"`
-	Bar    string `json:"bar"`
-	After  string `json:"after"`
-	Before string `json:"before"`
-	Limit  string `json:"limit"`
+type HistoryMarkPriceCandlesReq struct {
+	InstID string `json:"instId"`
+	After  int64  `json:"after,omitempty,string"`
+	Before int64  `json:"before,omitempty,string"`
+	Limit  int64  `json:"limit,omitempty,string"`
+	Bar    string `json:"bar,omitempty"`
 }
 
 type Resp[T any] struct {
@@ -249,7 +249,7 @@ type TakerVolume struct {
 	BuyVol  string `json:"buyVol"`
 }
 
-type GetCandlesticks struct {
+type CandlesticksReq struct {
 	InstID string `json:"instId"`
 	After  int64  `json:"after,omitempty,string"`
 	Before int64  `json:"before,omitempty,string"`

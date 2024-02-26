@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -24,7 +25,7 @@ func TestNewRestClient(t *testing.T) {
 	fmt.Println(rp)
 }
 
-func TestNewRestClient(t *testing.T) {
+func TestHistoryMarkPriceCandles(t *testing.T) {
 	client := NewRestClient(context.Background(), KeyConfig{
 		"",
 		"",
@@ -34,7 +35,7 @@ func TestNewRestClient(t *testing.T) {
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()
 
-	rp, err := client.HistoryMarkPriceCandles(context.Background(), &GetCandlesticks{
+	rp, err := client.HistoryMarkPriceCandles(context.Background(), HistoryMarkPriceCandlesReq{
 		InstID: "BTC-USDT",
 		After:  time.Now().UnixMilli(),
 		Before: startTime,
@@ -57,9 +58,9 @@ func TestGetCandlesticks(t *testing.T) {
 	today := time.Now()
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()
-	rp, err := client.GetCandlesticks(
+	rp, err := client.Candles(
 		context.Background(),
-		&GetCandlesticks{
+		&CandlesticksReq{
 			InstID: "BTC-USDT",
 			After:  time.Now().UnixMilli(),
 			Before: startTime,

@@ -10,17 +10,12 @@ func (c RestClient) PlaceOrder(ctx context.Context, req PlaceOrderReq) (*Resp[Pl
 func (c RestClient) Instruments(ctx context.Context, req InstrumentsReq) (*Resp[Instruments], error) {
 	return Get[Instruments](c, ctx, "/api/v5/public/instruments", req)
 }
-func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req *Candles) (*Resp[Candle], error) {
-	return Get[Candle](c, ctx, "/api/v5/market/history-mark-price-candles", req)
+func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req HistoryMarkPriceCandlesReq) (*Resp[Price], error) {
+	return Get[Price](c, ctx, "/api/v5/market/history-mark-price-candles", req)
 }
 func (c RestClient) TakerVolume(ctx context.Context, req *TakerVolumeReq) (*Resp[TakerVolume], error) {
 	return Get[TakerVolume](c, ctx, "/api/v5/rubik/stat/taker-volume", req)
 }
-
-func (c RestClient) GetCandlesticks(ctx context.Context, req *GetCandlesticks) (*Resp[Candle], error) {
-	data, err := c.Get(ctx, "/api/v5/market/candles", req)
-	if err != nil {
-		return nil, err
-	}
-	return unmarshal[Resp[Candle]](data)
+func (c RestClient) Candles(ctx context.Context, req *CandlesticksReq) (*Resp[Candle], error) {
+	return Get[Candle](c, ctx, "/api/v5/market/candles", req)
 }
