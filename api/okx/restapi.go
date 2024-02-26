@@ -20,8 +20,8 @@ func (c RestClient) Instruments(ctx context.Context, instType string) (*Resp[Ins
 	}
 	return unmarshal[Resp[Instruments]](data)
 }
-func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req *Candles) (*Resp[Candle], error) {
-	data, err := c.Get(ctx, "/api/v5/market/history-mark-price-candles", req)
+func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req *GetCandlesticks) (*Resp[Candle], error) {
+	data, err := c.Get(ctx, "/api/v5/market/history-candles", req)
 	if err != nil {
 		return nil, err
 	}
@@ -33,4 +33,12 @@ func (c RestClient) TakerVolume(ctx context.Context, req *TakerVolumeReq) (*Resp
 		return nil, err
 	}
 	return unmarshal[Resp[TakerVolume]](data)
+}
+
+func (c RestClient) GetCandlesticks(ctx context.Context, req *GetCandlesticks) (*Resp[Candle], error) {
+	data, err := c.Get(ctx, "/api/v5/market/candles", req)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshal[Resp[Candle]](data)
 }

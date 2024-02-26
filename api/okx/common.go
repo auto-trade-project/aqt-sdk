@@ -243,6 +243,14 @@ type TakerVolume struct {
 	BuyVol  string `json:"buyVol"`
 }
 
+type GetCandlesticks struct {
+	InstID string `json:"instId"`
+	After  int64  `json:"after,omitempty,string"`
+	Before int64  `json:"before,omitempty,string"`
+	Limit  int64  `json:"limit,omitempty,string"`
+	Bar    string `json:"bar,omitempty"`
+}
+
 func (t *TakerVolume) UnmarshalJSON(bytes []byte) (err error) {
 	str, err := unmarshalSliceString(bytes)
 	if err != nil {
