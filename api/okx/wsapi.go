@@ -1,7 +1,7 @@
 package okx
 
 func (w *WsClient) MarkPriceCandlesticks(channel, instId string) (<-chan *WsResp, error) {
-	return w.Subscribe(makeArg(channel, instId, nil), Business)
+	return w.Subscribe(makeArg("mark-price-candle"+channel, instId, nil), Business)
 }
 
 func (w *WsClient) UMarkPriceCandlesticks(channel, instId string) error {
