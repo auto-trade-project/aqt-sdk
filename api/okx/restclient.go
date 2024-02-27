@@ -48,7 +48,7 @@ func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Desti
 }
 
 func (c KeyConfig) makeHeader(method, requestPath string, body []byte) http.Header {
-	now := time.Now().Format("2006-01-02T15:04:05.999Z")
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.999Z")
 	sign := c.makeSign(now, method, requestPath, body)
 	return map[string][]string{
 		"OK-ACCESS-KEY":        {c.Apikey},
