@@ -37,6 +37,9 @@ func (w *WsClient) Login() (chan *WsResp, error) {
 func (w *WsClient) Account() (<-chan *WsResp, error) {
 	return w.Subscribe(makeArg("account", "", nil), Private)
 }
+func (w *WsClient) UAccount() error {
+	return w.UnSubscribe(makeArg("account", "", nil), Private)
+}
 
 // Positions 持仓频道
 func (w *WsClient) Positions() (<-chan *WsResp, error) {
