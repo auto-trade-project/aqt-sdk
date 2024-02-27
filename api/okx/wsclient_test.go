@@ -14,9 +14,9 @@ func TestNewWsClient(t *testing.T) {
 	client := NewWsClient(
 		context.Background(),
 		KeyConfig{
-			"",
-			"",
-			"",
+			"e1fd21f8-f934-4cf7-9921-b747f77fe526",
+			"607295DE8672908D2D6A46F2774550FD",
+			"14383421@Qq",
 		},
 		TestServer,
 	)

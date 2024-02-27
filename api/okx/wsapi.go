@@ -5,7 +5,7 @@ func (w *WsClient) MarkPriceCandlesticks(channel, instId string) (<-chan *WsResp
 }
 
 func (w *WsClient) UMarkPriceCandlesticks(channel, instId string) error {
-	return w.UnSubscribe(makeArg(channel, instId, nil), Business)
+	return w.UnSubscribe(makeArg("mark-price-candle"+channel, instId, nil), Business)
 }
 func (w *WsClient) MarkPrice(instId string) (<-chan *WsResp, error) {
 	return w.Subscribe(makeArg("mark-price", instId, nil), Public)

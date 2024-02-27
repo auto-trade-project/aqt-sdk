@@ -74,7 +74,9 @@ func heartbeat(conn *websocket.Conn) {
 }
 
 func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
+	w.l.RLock()
 	conn, ok := w.conns[typ]
+	w.l.RUnlock()
 	if !ok {
 		c, rp, err := connect(w.ctx, w.urls[typ])
 		if err != nil {
@@ -84,6 +86,8 @@ func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 			return nil, fmt.Errorf("connect response err: %v", rp)
 		}
 		conn = c
+		w.l.Lock()
+		defer w.l.Unlock()
 		w.conns[typ] = conn
 		go w.process(conn)
 	}
@@ -137,7 +141,7 @@ func (w *WsClient) process(conn *websocket.Conn) {
 		v := &WsResp{}
 		err := conn.ReadJSON(v)
 		if err != nil {
-			return
+			continue
 		}
 
 		bs, _ := json.Marshal(v.Arg)
@@ -217,6 +221,9 @@ func (w *WsClient) Subscribe(arg *Arg, typ SvcType) (<-chan *WsResp, error) {
 }
 
 func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
+	if typ == Private && !w.isLogin {
+		return nil
+	}
 	return w.Send(typ, Op{
 		Op:   "unsubscribe",
 		Args: []*Arg{arg},
