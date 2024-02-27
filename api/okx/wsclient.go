@@ -2,10 +2,12 @@ package okx
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
-	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +36,7 @@ type WsClient struct {
 	subscribeKey        map[string]*Arg
 	chanMap             map[string]chan *WsResp
 	keyConfig           KeyConfig
+	isLogin             bool
 }
 
 func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination) *WsClient {
@@ -53,11 +56,11 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 }
 func connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
 	conn, rp, err := websocket.DefaultDialer.DialContext(ctx, string(url), nil)
-	go process(conn)
+	go heartbeat(conn)
 	return conn, rp, err
 }
 
-func process(conn *websocket.Conn) {
+func heartbeat(conn *websocket.Conn) {
 	timer := time.NewTimer(time.Second * 20)
 	for {
 		select {
@@ -137,29 +140,40 @@ func (w *WsClient) process(conn *websocket.Conn) {
 			return
 		}
 
-		valueOfArg := reflect.ValueOf(v.Arg)
-		var channel []string
-		for i := 0; i < valueOfArg.NumField(); i++ {
-			field := valueOfArg.Field(i)
-			channel = append(channel, field.String())
-		}
+		bs, _ := json.Marshal(v.Arg)
+		hash := md5.New()
+		hash.Write(bs)
+		channel := hex.EncodeToString(hash.Sum(nil))
 		if v.Event == "unsubscribe" {
 			if w.UnSubscribeCallback != nil {
 				w.UnSubscribeCallback()
 			}
-			w.UnRegCh(strings.Join(channel, "-"))
+			w.UnRegCh(channel)
 			continue
 		} else if v.Event == "subscribe" {
 			if w.SubscribeCallback != nil {
 				w.SubscribeCallback()
 			}
 			continue
+		} else if v.Event == "login" {
+			fmt.Println("login success")
+			w.isLogin = true
+			w.push("login", v)
+			w.UnRegCh("login")
+			continue
+		} else if v.Event == "error" {
+			if v.Code == "60009" {
+				w.push("login", v)
+				w.UnRegCh("login")
+			}
+			fmt.Printf("read ws err: %v\n", v)
+			continue
 		}
 		if v.Data == nil {
 			fmt.Printf("ignore data: %v\n", v)
 			continue
 		}
-		w.push(strings.Join(channel, "-"), v)
+		w.push(channel, v)
 	}
 }
 
@@ -172,20 +186,31 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 }
 
 func (w *WsClient) Subscribe(arg *Arg, typ SvcType) (<-chan *WsResp, error) {
+	if typ == Private && !w.isLogin {
+		ch, err := w.Login()
+		if err != nil {
+			return nil, err
+		}
+		resp := <-ch
+		if resp.Event == "error" || !w.isLogin {
+			return nil, errors.New(resp.Msg)
+		}
+	}
 	if err := w.Send(typ, Op{
 		Op:   "subscribe",
 		Args: []*Arg{arg},
 	}); err != nil {
 		return nil, err
 	}
-	valueOfArg := reflect.ValueOf(arg).Elem()
-	var channel []string
-	for i := 0; i < valueOfArg.NumField(); i++ {
-		field := valueOfArg.Field(i)
-		channel = append(channel, field.String())
+	bs, err := json.Marshal(arg)
+	if err != nil {
+		return nil, err
 	}
+	hash := md5.New()
+	hash.Write(bs)
+	hex.EncodeToString(hash.Sum(nil))
 	respCh := make(chan *WsResp)
-	if respCh, isExist := w.RegCh(strings.Join(channel, "-"), respCh); isExist {
+	if respCh, isExist := w.RegCh(hex.EncodeToString(hash.Sum(nil)), respCh); isExist {
 		return respCh, nil
 	}
 	return respCh, nil

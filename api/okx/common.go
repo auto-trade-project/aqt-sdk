@@ -97,12 +97,13 @@ type UnSubChannel struct {
 	InstId  string `json:"instId"`
 }
 type Arg struct {
-	Channel string `json:"channel"`
-	InstId  string `json:"instId"`
+	Channel string `json:"channel,omitempty"`
+	InstId  string `json:"instId,omitempty"`
+	any
 }
 type Op struct {
 	Op   string `json:"op"`
-	Args []*Arg `json:"args"`
+	Args any    `json:"args"`
 }
 type WsResp struct {
 	Event  string     `json:"event"`
@@ -147,10 +148,11 @@ type Resp[T any] struct {
 	Data []T    `json:"data"`
 }
 
-func makeArg(channel, InstId string) *Arg {
+func makeArg(channel, InstId string, ex any) *Arg {
 	return &Arg{
 		Channel: channel,
 		InstId:  InstId,
+		any:     ex,
 	}
 }
 func makeOp(op string, args []*Arg) Op {
@@ -372,4 +374,60 @@ func (o *OrderBook) UnmarshalJSON(bytes []byte) (err error) {
 	o.Bids = bids
 	o.Ts = tmp.Ts
 	return nil
+}
+
+type Balances struct {
+	Ccy       string `json:"ccy"`
+	Bal       string `json:"bal"`
+	FrozenBal string `json:"frozenBal"`
+	AvailBal  string `json:"availBal"`
+}
+type Balance struct {
+	AdjEq      string `json:"adjEq"`
+	BorrowFroz string `json:"borrowFroz"`
+	Details    []struct {
+		AvailBal      string `json:"availBal"`
+		AvailEq       string `json:"availEq"`
+		BorrowFroz    string `json:"borrowFroz"`
+		CashBal       string `json:"cashBal"`
+		Ccy           string `json:"ccy"`
+		CrossLiab     string `json:"crossLiab"`
+		DisEq         string `json:"disEq"`
+		Eq            string `json:"eq"`
+		EqUsd         string `json:"eqUsd"`
+		FixedBal      string `json:"fixedBal"`
+		FrozenBal     string `json:"frozenBal"`
+		Imr           string `json:"imr"`
+		Interest      string `json:"interest"`
+		IsoEq         string `json:"isoEq"`
+		IsoLiab       string `json:"isoLiab"`
+		IsoUpl        string `json:"isoUpl"`
+		Liab          string `json:"liab"`
+		MaxLoan       string `json:"maxLoan"`
+		MgnRatio      string `json:"mgnRatio"`
+		Mmr           string `json:"mmr"`
+		NotionalLever string `json:"notionalLever"`
+		OrdFrozen     string `json:"ordFrozen"`
+		SpotInUseAmt  string `json:"spotInUseAmt"`
+		SpotIsoBal    string `json:"spotIsoBal"`
+		StgyEq        string `json:"stgyEq"`
+		Twap          string `json:"twap"`
+		UTime         string `json:"uTime"`
+		Upl           string `json:"upl"`
+		UplLiab       string `json:"uplLiab"`
+	} `json:"details"`
+	Imr         string `json:"imr"`
+	IsoEq       string `json:"isoEq"`
+	MgnRatio    string `json:"mgnRatio"`
+	Mmr         string `json:"mmr"`
+	NotionalUsd string `json:"notionalUsd"`
+	OrdFroz     string `json:"ordFroz"`
+	TotalEq     string `json:"totalEq"`
+	UTime       string `json:"uTime"`
+	Upl         string `json:"upl"`
+}
+type PositionReq struct {
+	InstType string `json:"instType"`
+	InstId   string `json:"instId"`
+	PosId    string `json:"posId"`
 }

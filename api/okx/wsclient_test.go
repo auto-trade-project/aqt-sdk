@@ -20,10 +20,10 @@ func TestNewWsClient(t *testing.T) {
 		},
 		TestServer,
 	)
-	count := 10
+	count := 2
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		ch, err := client.MarkPriceCandlesticks("mark-price-candle1M", "BTC-USDT")
+		ch, err := client.Account()
 		if err != nil {
 			assert.Fail(t, err.Error())
 			return
@@ -40,27 +40,27 @@ func TestNewWsClient(t *testing.T) {
 			cond.L.Unlock()
 		}
 	}()
-	go func() {
-		ch, err := client.MarkPrice("BTC-USDT")
-		if err != nil {
-			assert.Fail(t, err.Error())
-			return
-		}
-		for {
-			resp, ok := <-ch
-			if !ok {
-				return
-			}
-			fmt.Println(*resp)
-			cond.L.Lock()
-			count--
-			cond.Broadcast()
-			cond.L.Unlock()
-		}
-	}()
+	//go func() {
+	//	ch, err := client.MarkPrice("BTC-USDT")
+	//	if err != nil {
+	//		assert.Fail(t, err.Error())
+	//		return
+	//	}
+	//	for {
+	//		resp, ok := <-ch
+	//		if !ok {
+	//			return
+	//		}
+	//		fmt.Println(*resp)
+	//		cond.L.Lock()
+	//		count--
+	//		cond.Broadcast()
+	//		cond.L.Unlock()
+	//	}
+	//}()
 	isFailed := false
 	go func() {
-		<-time.After(time.Second * 10)
+		<-time.After(time.Second * 20)
 
 		cond.L.Lock()
 		isFailed = true

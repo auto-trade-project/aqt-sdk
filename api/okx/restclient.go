@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,7 +48,8 @@ func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Desti
 }
 
 func (c KeyConfig) makeHeader(method, requestPath string, body []byte) http.Header {
-	sign, now := c.makeSign(method, requestPath, body)
+	now := time.Now().Format("2006-01-02T15:04:05.999Z")
+	sign := c.makeSign(now, method, requestPath, body)
 	return map[string][]string{
 		"OK-ACCESS-KEY":        {c.Apikey},
 		"OK-ACCESS-SIGN":       {sign},
@@ -58,26 +59,26 @@ func (c KeyConfig) makeHeader(method, requestPath string, body []byte) http.Head
 }
 
 func (c KeyConfig) makeWsSign() map[string]string {
-	sign, now := c.makeSign("GET", "/users/self/verify", []byte(""))
+	now := fmt.Sprint(time.Now().UTC().Unix())
+	sign := c.makeSign(now, http.MethodGet, "/users/self/verify", []byte(""))
 	return map[string]string{
-		"OK-ACCESS-KEY":        c.Apikey,
-		"OK-ACCESS-SIGN":       sign,
-		"OK-ACCESS-TIMESTAMP":  now,
-		"OK-ACCESS-PASSPHRASE": c.Passphrase,
+		"apiKey":     c.Apikey,
+		"sign":       sign,
+		"timestamp":  now,
+		"passphrase": c.Passphrase,
 	}
 }
-func (c KeyConfig) makeSign(method, requestPath string, body []byte) (sign string, now string) {
+func (c KeyConfig) makeSign(now, method, requestPath string, body []byte) (sign string) {
 	method = strings.ToUpper(method)
-	now = time.Now().Format("2006-01-02T15:04:05.999Z")
 	hash := hmac.New(sha256.New, []byte(c.Secretkey))
 	hash.Write(append([]byte(now+method+requestPath), body...))
-	return hex.EncodeToString(hash.Sum(nil)), now
+	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
 }
 func Get[T any](c RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
-	return Do[T](c, c.MakeRequest(ctx, "GET", url, params))
+	return Do[T](c, c.MakeRequest(ctx, http.MethodGet, url, params))
 }
 func Post[T any](c RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
-	return Do[T](c, c.MakeRequest(ctx, "POST", url, params))
+	return Do[T](c, c.MakeRequest(ctx, http.MethodPost, url, params))
 }
 func Do[T any](c RestClient, req *http.Request) (*Resp[T], error) {
 	rp, err := c.client.Do(req)
@@ -108,7 +109,7 @@ func (c RestClient) MakeRequest(ctx context.Context, method, url string, params 
 		bs = nil
 	}
 	req, _ := http.NewRequestWithContext(ctx, method, string(c.baseUrl)+url+uri, bytes.NewReader(bs))
-	header := c.keyConfig.makeHeader(method, url, bs)
+	header := c.keyConfig.makeHeader(method, url+uri, bs)
 	if c.isTest {
 		header["x-simulated-trading"] = []string{"1"}
 	}
