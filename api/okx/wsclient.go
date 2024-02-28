@@ -27,13 +27,9 @@ type WsClient struct {
 	cancel              func()
 	urls                map[SvcType]BaseURL
 	conns               map[SvcType]*websocket.Conn
-	apikey              string
-	secretkey           string
-	passphrase          string
 	SubscribeCallback   func()
 	UnSubscribeCallback func()
 	l                   sync.RWMutex
-	subscribeKey        map[string]*Arg
 	chanMap             map[string]chan *WsResp
 	keyConfig           KeyConfig
 	isLogin             bool
@@ -63,18 +59,18 @@ func connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response,
 func heartbeat(conn *websocket.Conn) {
 	timer := time.NewTimer(time.Second * 20)
 	for {
-		select {
-		case <-timer.C:
-			err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
-			if err != nil {
-				return
-			}
+		<-timer.C
+		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
+		if err != nil {
+			return
 		}
 	}
 }
 
 func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
+	w.l.RLock()
 	conn, ok := w.conns[typ]
+	w.l.RUnlock()
 	if !ok {
 		c, rp, err := connect(w.ctx, w.urls[typ])
 		if err != nil {
@@ -83,9 +79,20 @@ func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 		if rp.StatusCode != 101 {
 			return nil, fmt.Errorf("connect response err: %v", rp)
 		}
+		// 监听连接关闭,进行资源回收
+		c.SetCloseHandler(func(code int, text string) error {
+			w.l.Lock()
+			defer w.l.Unlock()
+
+			delete(w.conns, typ)
+			return nil
+		})
 		conn = c
+		w.l.Lock()
+		defer w.l.Unlock()
 		w.conns[typ] = conn
-		go w.process(conn)
+
+		go w.process(typ, conn)
 	}
 	return conn, nil
 }
@@ -132,12 +139,15 @@ func (w *WsClient) UnRegCh(channel string) {
 		delete(w.chanMap, channel)
 	}
 }
-func (w *WsClient) process(conn *websocket.Conn) {
+func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
+	defer func() {
+		_ = recover()
+	}()
 	for {
 		v := &WsResp{}
 		err := conn.ReadJSON(v)
 		if err != nil {
-			return
+			continue
 		}
 
 		bs, _ := json.Marshal(v.Arg)
@@ -166,7 +176,7 @@ func (w *WsClient) process(conn *websocket.Conn) {
 				w.push("login", v)
 				w.UnRegCh("login")
 			}
-			fmt.Printf("read ws err: %v\n", v)
+			fmt.Printf("Service net '%s' read ws err: %v\n", typ, v)
 			continue
 		}
 		if v.Data == nil {
@@ -217,6 +227,9 @@ func (w *WsClient) Subscribe(arg *Arg, typ SvcType) (<-chan *WsResp, error) {
 }
 
 func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
+	if typ == Private && !w.isLogin {
+		return nil
+	}
 	return w.Send(typ, Op{
 		Op:   "unsubscribe",
 		Args: []*Arg{arg},

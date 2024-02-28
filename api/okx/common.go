@@ -99,7 +99,7 @@ type UnSubChannel struct {
 type Arg struct {
 	Channel string `json:"channel,omitempty"`
 	InstId  string `json:"instId,omitempty"`
-	any
+	SprdId  string `json:"sprdId,omitempty"`
 }
 type Op struct {
 	Op   string `json:"op"`
@@ -148,17 +148,16 @@ type Resp[T any] struct {
 	Data []T    `json:"data"`
 }
 
-func makeArg(channel, InstId string, ex any) *Arg {
+func makeArg(channel, instId string) *Arg {
 	return &Arg{
 		Channel: channel,
-		InstId:  InstId,
-		any:     ex,
+		InstId:  instId,
 	}
 }
-func makeOp(op string, args []*Arg) Op {
-	return Op{
-		Op:   op,
-		Args: args,
+func makeSprdArg(channel, sprdId string) *Arg {
+	return &Arg{
+		Channel: channel,
+		SprdId:  sprdId,
 	}
 }
 
@@ -169,7 +168,61 @@ type PlaceOrder struct {
 	SCode   string `json:"sCode"`
 	SMsg    string `json:"sMsg"`
 }
-
+type Order struct {
+	AccFillSz          string        `json:"accFillSz"`
+	AlgoClOrdId        string        `json:"algoClOrdId"`
+	AlgoId             string        `json:"algoId"`
+	AttachAlgoClOrdId  string        `json:"attachAlgoClOrdId"`
+	AttachAlgoOrds     []interface{} `json:"attachAlgoOrds"`
+	AvgPx              string        `json:"avgPx"`
+	CTime              string        `json:"cTime"`
+	CancelSource       string        `json:"cancelSource"`
+	CancelSourceReason string        `json:"cancelSourceReason"`
+	Category           string        `json:"category"`
+	Ccy                string        `json:"ccy"`
+	ClOrdId            string        `json:"clOrdId"`
+	Fee                string        `json:"fee"`
+	FeeCcy             string        `json:"feeCcy"`
+	FillPx             string        `json:"fillPx"`
+	FillSz             string        `json:"fillSz"`
+	FillTime           string        `json:"fillTime"`
+	InstId             string        `json:"instId"`
+	InstType           string        `json:"instType"`
+	IsTpLimit          string        `json:"isTpLimit"`
+	Lever              string        `json:"lever"`
+	LinkedAlgoOrd      struct {
+		AlgoId string `json:"algoId"`
+	} `json:"linkedAlgoOrd"`
+	OrdId           string `json:"ordId"`
+	OrdType         string `json:"ordType"`
+	Pnl             string `json:"pnl"`
+	PosSide         string `json:"posSide"`
+	Px              string `json:"px"`
+	PxType          string `json:"pxType"`
+	PxUsd           string `json:"pxUsd"`
+	PxVol           string `json:"pxVol"`
+	QuickMgnType    string `json:"quickMgnType"`
+	Rebate          string `json:"rebate"`
+	RebateCcy       string `json:"rebateCcy"`
+	ReduceOnly      string `json:"reduceOnly"`
+	Side            string `json:"side"`
+	SlOrdPx         string `json:"slOrdPx"`
+	SlTriggerPx     string `json:"slTriggerPx"`
+	SlTriggerPxType string `json:"slTriggerPxType"`
+	Source          string `json:"source"`
+	State           string `json:"state"`
+	StpId           string `json:"stpId"`
+	StpMode         string `json:"stpMode"`
+	Sz              string `json:"sz"`
+	Tag             string `json:"tag"`
+	TdMode          string `json:"tdMode"`
+	TgtCcy          string `json:"tgtCcy"`
+	TpOrdPx         string `json:"tpOrdPx"`
+	TpTriggerPx     string `json:"tpTriggerPx"`
+	TpTriggerPxType string `json:"tpTriggerPxType"`
+	TradeId         string `json:"tradeId"`
+	UTime           string `json:"uTime"`
+}
 type Candle struct {
 	Ts          string `json:"ts"`
 	O           string `json:"o"`

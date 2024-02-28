@@ -5,7 +5,10 @@ import (
 )
 
 func (c RestClient) PlaceOrder(ctx context.Context, req PlaceOrderReq) (*Resp[PlaceOrder], error) {
-	return Get[PlaceOrder](c, ctx, "/api/v5/trade/order", req)
+	return Post[PlaceOrder](c, ctx, "/api/v5/trade/order", req)
+}
+func (c RestClient) GetOrder(ctx context.Context, req PlaceOrderReq) (*Resp[Order], error) {
+	return Get[Order](c, ctx, "/api/v5/trade/order", req)
 }
 func (c RestClient) Instruments(ctx context.Context, req InstrumentsReq) (*Resp[Instruments], error) {
 	return Get[Instruments](c, ctx, "/api/v5/public/instruments", req)
