@@ -134,7 +134,7 @@ type InstrumentsReq struct {
 	InstFamily string `json:"instFamily"`
 	InstId     string `json:"instId"`
 }
-type HistoryMarkPriceCandlesReq struct {
+type MarkPriceCandlesReq struct {
 	InstID string `json:"instId"`
 	After  int64  `json:"after,omitempty,string"`
 	Before int64  `json:"before,omitempty,string"`

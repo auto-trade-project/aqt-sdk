@@ -20,12 +20,12 @@ func (c RestClient) Instruments(ctx context.Context, req InstrumentsReq) (*Resp[
 }
 
 // MarkPriceCandles 获取当前k线标价
-func (c RestClient) MarkPriceCandles(ctx context.Context, req HistoryMarkPriceCandlesReq) (*Resp[MarkPriceCandle], error) {
+func (c RestClient) MarkPriceCandles(ctx context.Context, req MarkPriceCandlesReq) (*Resp[MarkPriceCandle], error) {
 	return Get[MarkPriceCandle](c, ctx, "/api/v5/market/mark-price-candles", req)
 }
 
 // HistoryMarkPriceCandles 获取历史k线标价
-func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req HistoryMarkPriceCandlesReq) (*Resp[MarkPriceCandle], error) {
+func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req MarkPriceCandlesReq) (*Resp[MarkPriceCandle], error) {
 	return Get[MarkPriceCandle](c, ctx, "/api/v5/market/history-mark-price-candles", req)
 }
 
