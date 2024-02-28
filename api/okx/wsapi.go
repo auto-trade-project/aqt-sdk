@@ -18,7 +18,7 @@ func (w *WsClient) OrderBook(channel, sprdId string) (<-chan *WsResp, error) {
 	return w.Subscribe(makeSprdArg(channel, sprdId), Business)
 }
 func (w *WsClient) UOrderBook(channel, instId string) error {
-	return w.UnSubscribe(makeArg(channel, instId), Business)
+	return w.UnSubscribe(makeSprdArg(channel, instId), Business)
 }
 
 func (w *WsClient) Login() (chan *WsResp, error) {

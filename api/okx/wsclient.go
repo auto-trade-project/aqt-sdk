@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -158,7 +159,6 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			if w.UnSubscribeCallback != nil {
 				w.UnSubscribeCallback()
 			}
-			w.UnRegCh(channel)
 			continue
 		} else if v.Event == "subscribe" {
 			if w.SubscribeCallback != nil {
@@ -166,7 +166,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			}
 			continue
 		} else if v.Event == "login" {
-			fmt.Println("login success")
+			log.Println("login success")
 			w.isLogin = true
 			w.push("login", v)
 			w.UnRegCh("login")
@@ -174,13 +174,12 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 		} else if v.Event == "error" {
 			if v.Code == "60009" {
 				w.push("login", v)
-				w.UnRegCh("login")
 			}
-			fmt.Printf("Service net '%s' read ws err: %v\n", typ, v)
+			log.Printf("Service net '%s' read ws err: %v\n", typ, v)
 			continue
 		}
 		if v.Data == nil {
-			fmt.Printf("ignore data: %v\n", v)
+			log.Printf("ignore data: %v\n", v)
 			continue
 		}
 		w.push(channel, v)
