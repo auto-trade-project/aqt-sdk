@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -27,13 +28,9 @@ type WsClient struct {
 	cancel              func()
 	urls                map[SvcType]BaseURL
 	conns               map[SvcType]*websocket.Conn
-	apikey              string
-	secretkey           string
-	passphrase          string
 	SubscribeCallback   func()
 	UnSubscribeCallback func()
 	l                   sync.RWMutex
-	subscribeKey        map[string]*Arg
 	chanMap             map[string]chan *WsResp
 	keyConfig           KeyConfig
 	isLogin             bool
@@ -63,12 +60,10 @@ func connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response,
 func heartbeat(conn *websocket.Conn) {
 	timer := time.NewTimer(time.Second * 20)
 	for {
-		select {
-		case <-timer.C:
-			err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
-			if err != nil {
-				return
-			}
+		<-timer.C
+		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
+		if err != nil {
+			return
 		}
 	}
 }
@@ -85,11 +80,20 @@ func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 		if rp.StatusCode != 101 {
 			return nil, fmt.Errorf("connect response err: %v", rp)
 		}
+		// 监听连接关闭,进行资源回收
+		c.SetCloseHandler(func(code int, text string) error {
+			w.l.Lock()
+			defer w.l.Unlock()
+
+			delete(w.conns, typ)
+			return nil
+		})
 		conn = c
 		w.l.Lock()
 		defer w.l.Unlock()
 		w.conns[typ] = conn
-		go w.process(conn)
+
+		go w.process(typ, conn)
 	}
 	return conn, nil
 }
@@ -136,7 +140,10 @@ func (w *WsClient) UnRegCh(channel string) {
 		delete(w.chanMap, channel)
 	}
 }
-func (w *WsClient) process(conn *websocket.Conn) {
+func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
+	defer func() {
+		_ = recover()
+	}()
 	for {
 		v := &WsResp{}
 		err := conn.ReadJSON(v)
@@ -152,7 +159,6 @@ func (w *WsClient) process(conn *websocket.Conn) {
 			if w.UnSubscribeCallback != nil {
 				w.UnSubscribeCallback()
 			}
-			w.UnRegCh(channel)
 			continue
 		} else if v.Event == "subscribe" {
 			if w.SubscribeCallback != nil {
@@ -160,7 +166,7 @@ func (w *WsClient) process(conn *websocket.Conn) {
 			}
 			continue
 		} else if v.Event == "login" {
-			fmt.Println("login success")
+			log.Println("login success")
 			w.isLogin = true
 			w.push("login", v)
 			w.UnRegCh("login")
@@ -168,13 +174,12 @@ func (w *WsClient) process(conn *websocket.Conn) {
 		} else if v.Event == "error" {
 			if v.Code == "60009" {
 				w.push("login", v)
-				w.UnRegCh("login")
 			}
-			fmt.Printf("read ws err: %v\n", v)
+			log.Printf("Service net '%s' read ws err: %v\n", typ, v)
 			continue
 		}
 		if v.Data == nil {
-			fmt.Printf("ignore data: %v\n", v)
+			log.Printf("ignore data: %v\n", v)
 			continue
 		}
 		w.push(channel, v)

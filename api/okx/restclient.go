@@ -123,7 +123,9 @@ func makeUri(bs []byte) (uri string) {
 		uri += "?"
 		var fields []string
 		for k, item := range query {
-			fields = append(fields, fmt.Sprintf("%v=%v", k, item))
+			if item != "" {
+				fields = append(fields, fmt.Sprintf("%v=%v", k, item))
+			}
 		}
 		uri += strings.Join(fields, "&")
 	}

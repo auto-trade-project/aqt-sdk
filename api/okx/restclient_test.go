@@ -10,11 +10,7 @@ import (
 )
 
 func TestNewRestClient(t *testing.T) {
-	client := NewRestClient(context.Background(), KeyConfig{
-		"",
-		"",
-		"",
-	}, TestServer)
+	client := NewRestClient(context.Background(), config, TestServer)
 	rp, err := client.Instruments(context.Background(), InstrumentsReq{
 		InstType: "SPOT",
 	})
@@ -26,11 +22,7 @@ func TestNewRestClient(t *testing.T) {
 }
 
 func TestHistoryMarkPriceCandles(t *testing.T) {
-	client := NewRestClient(context.Background(), KeyConfig{
-		"",
-		"",
-		"",
-	}, TestServer)
+	client := NewRestClient(context.Background(), config, TestServer)
 	today := time.Now()
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()
@@ -50,11 +42,7 @@ func TestHistoryMarkPriceCandles(t *testing.T) {
 }
 
 func TestGetCandlesticks(t *testing.T) {
-	client := NewRestClient(context.Background(), KeyConfig{
-		"",
-		"",
-		"",
-	}, TestServer)
+	client := NewRestClient(context.Background(), config, TestServer)
 	today := time.Now()
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()

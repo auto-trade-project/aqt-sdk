@@ -10,20 +10,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var config = KeyConfig{
+	"",
+	"",
+	"",
+}
+
 func TestNewWsClient(t *testing.T) {
 	client := NewWsClient(
 		context.Background(),
-		KeyConfig{
-			"e1fd21f8-f934-4cf7-9921-b747f77fe526",
-			"607295DE8672908D2D6A46F2774550FD",
-			"14383421@Qq",
-		},
+		config,
 		TestServer,
 	)
 	count := 2
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		ch, err := client.Account()
+		ch, err := client.OrderBook("sprd-books5", "BTC-USDT_BTC-USDT-240329")
 		if err != nil {
 			assert.Fail(t, err.Error())
 			return
