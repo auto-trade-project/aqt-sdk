@@ -4,21 +4,37 @@ import (
 	"context"
 )
 
+// PlaceOrder 下单
 func (c RestClient) PlaceOrder(ctx context.Context, req PlaceOrderReq) (*Resp[PlaceOrder], error) {
 	return Post[PlaceOrder](c, ctx, "/api/v5/trade/order", req)
 }
+
+// GetOrder 获取订单信息
 func (c RestClient) GetOrder(ctx context.Context, req PlaceOrderReq) (*Resp[Order], error) {
 	return Get[Order](c, ctx, "/api/v5/trade/order", req)
 }
+
+// Instruments 获取产品信息
 func (c RestClient) Instruments(ctx context.Context, req InstrumentsReq) (*Resp[Instruments], error) {
 	return Get[Instruments](c, ctx, "/api/v5/public/instruments", req)
 }
-func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req HistoryMarkPriceCandlesReq) (*Resp[Price], error) {
-	return Get[Price](c, ctx, "/api/v5/market/history-mark-price-candles", req)
+
+// MarkPriceCandles 获取当前k线标价
+func (c RestClient) MarkPriceCandles(ctx context.Context, req HistoryMarkPriceCandlesReq) (*Resp[MarkPriceCandle], error) {
+	return Get[MarkPriceCandle](c, ctx, "/api/v5/market/mark-price-candles", req)
 }
+
+// HistoryMarkPriceCandles 获取历史k线标价
+func (c RestClient) HistoryMarkPriceCandles(ctx context.Context, req HistoryMarkPriceCandlesReq) (*Resp[MarkPriceCandle], error) {
+	return Get[MarkPriceCandle](c, ctx, "/api/v5/market/history-mark-price-candles", req)
+}
+
+// TakerVolume 主动买卖交易量
 func (c RestClient) TakerVolume(ctx context.Context, req TakerVolumeReq) (*Resp[TakerVolume], error) {
 	return Get[TakerVolume](c, ctx, "/api/v5/rubik/stat/taker-volume", req)
 }
+
+// Candles 获取产品k线标价
 func (c RestClient) Candles(ctx context.Context, req CandlesticksReq) (*Resp[Candle], error) {
 	return Get[Candle](c, ctx, "/api/v5/market/candles", req)
 }

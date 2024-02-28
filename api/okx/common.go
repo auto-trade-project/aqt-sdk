@@ -329,7 +329,7 @@ func (t *TakerVolume) UnmarshalJSON(bytes []byte) (err error) {
 	return nil
 }
 
-type Price struct {
+type MarkPriceCandle struct {
 	Ts      string // 时间戳
 	O       string // 开盘价格
 	H       string // 最高价格
@@ -338,7 +338,7 @@ type Price struct {
 	Confirm string // K线状态
 }
 
-func (p *Price) UnmarshalJSON(bytes []byte) (err error) {
+func (p *MarkPriceCandle) UnmarshalJSON(bytes []byte) (err error) {
 	str, err := unmarshalSliceString(bytes)
 	if err != nil {
 		return err

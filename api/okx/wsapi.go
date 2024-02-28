@@ -3,9 +3,14 @@ package okx
 func (w *WsClient) MarkPriceCandlesticks(channel, instId string) (<-chan *WsResp, error) {
 	return w.Subscribe(makeArg("mark-price-candle"+channel, instId), Business)
 }
-
 func (w *WsClient) UMarkPriceCandlesticks(channel, instId string) error {
 	return w.UnSubscribe(makeArg("mark-price-candle"+channel, instId), Business)
+}
+func (w *WsClient) Candle(channel, instId string) (<-chan *WsResp, error) {
+	return w.Subscribe(makeArg("candle"+channel, instId), Business)
+}
+func (w *WsClient) UCandle(channel, instId string) error {
+	return w.UnSubscribe(makeArg("candle"+channel, instId), Business)
 }
 func (w *WsClient) MarkPrice(instId string) (<-chan *WsResp, error) {
 	return w.Subscribe(makeArg("mark-price", instId), Public)
