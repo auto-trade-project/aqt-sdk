@@ -25,7 +25,7 @@ func TestNewWsClient(t *testing.T) {
 	count := 2
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		ch, err := client.OrderBook("sprd-books5", "BTC-USDT_BTC-USDT-240329")
+		ch, err := client.Trades("BTC-USDT_BTC-USDT-240329")
 		if err != nil {
 			assert.Fail(t, err.Error())
 			return

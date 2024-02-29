@@ -179,6 +179,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			if w.SubscribeCallback != nil {
 				w.SubscribeCallback()
 			}
+			w.log.Info(fmt.Sprintf("%+v subscribe success", v.Arg))
 			continue
 		} else if v.Event == "login" {
 			w.log.Info("login success")
@@ -207,12 +208,17 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	}
 	w.l.Lock()
 	defer w.l.Unlock()
-	return conn.WriteJSON(req)
+	bs, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	w.log.Info(string(bs))
+	return conn.WriteMessage(websocket.TextMessage, bs)
 }
 
-func (w *WsClient) Subscribe(arg *Arg, typ SvcType) (<-chan *WsResp, error) {
-	if typ == Private && !w.isLogin {
-		ch, err := w.Login()
+func (w *WsClient) Subscribe(arg *Arg, typ SvcType, needLogin bool) (<-chan *WsResp, error) {
+	if needLogin && !w.isLogin {
+		ch, err := w.Login(typ)
 		if err != nil {
 			return nil, err
 		}
