@@ -51,3 +51,8 @@ func (w *WsClient) UAccount() error {
 func (w *WsClient) Positions() (<-chan *WsResp, error) {
 	return w.Subscribe(makeArg("positions", ""), Private)
 }
+
+// Trades 成交订单频道
+func (w *WsClient) Trades(sprdId string) (<-chan *WsResp, error) {
+	return w.Subscribe(makeSprdArg("sprd-trades", sprdId), Private)
+}
