@@ -34,6 +34,11 @@ type WsClient struct {
 	chanMap             map[string]chan *WsResp
 	keyConfig           KeyConfig
 	isLogin             bool
+	log                 Log
+}
+type Log struct {
+	Info  func(msg string)
+	Error func(msg string)
 }
 
 func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination) *WsClient {
@@ -42,6 +47,9 @@ func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination) *WsC
 
 func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]map[SvcType]BaseURL) *WsClient {
 	ctx, cancel := context.WithCancel(ctx)
+	l := func(msg string) {
+		log.Println(msg)
+	}
 	return &WsClient{
 		ctx:       ctx,
 		cancel:    cancel,
@@ -49,6 +57,10 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 		keyConfig: keyConfig,
 		conns:     map[SvcType]*websocket.Conn{},
 		chanMap:   make(map[string]chan *WsResp, 1000),
+		log: Log{
+			Info:  l,
+			Error: l,
+		},
 	}
 }
 func connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
@@ -68,6 +80,9 @@ func heartbeat(conn *websocket.Conn) {
 	}
 }
 
+func (w *WsClient) SetLog(log Log) {
+	w.log = log
+}
 func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 	w.l.RLock()
 	conn, ok := w.conns[typ]
@@ -104,10 +119,10 @@ func (w *WsClient) push(channel string, resp *WsResp) {
 		select {
 		case ch <- resp:
 		case <-time.After(time.Second * 3):
-			fmt.Printf("ignore data: %v\n", resp)
+			w.log.Info(fmt.Sprintf("ignore data: %v", resp))
 		}
 	} else {
-		fmt.Printf("ignore data: %v\n", resp)
+		w.log.Info(fmt.Sprintf("ignore data: %v", resp))
 	}
 }
 
@@ -166,7 +181,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			}
 			continue
 		} else if v.Event == "login" {
-			log.Println("login success")
+			w.log.Info("login success")
 			w.isLogin = true
 			w.push("login", v)
 			continue
@@ -174,11 +189,11 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			if v.Code == "60009" {
 				w.push("login", v)
 			}
-			log.Printf("Service net '%s' read ws err: %v\n", typ, v)
+			w.log.Error(fmt.Sprintf("Service net '%s' read ws err: %v", typ, v))
 			continue
 		}
 		if v.Data == nil {
-			log.Printf("ignore data: %v\n", v)
+			w.log.Info(fmt.Sprintf("ignore data: %v\n", v))
 			continue
 		}
 		w.push(channel, v)
