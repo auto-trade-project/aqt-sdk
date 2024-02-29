@@ -27,7 +27,7 @@ func TestHistoryMarkPriceCandles(t *testing.T) {
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()
 
-	rp, err := client.HistoryMarkPriceCandles(context.Background(), HistoryMarkPriceCandlesReq{
+	rp, err := client.HistoryMarkPriceCandles(context.Background(), MarkPriceCandlesReq{
 		InstID: "BTC-USDT",
 		After:  time.Now().UnixMilli(),
 		Before: startTime,

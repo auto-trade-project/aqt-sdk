@@ -48,7 +48,7 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 		urls:      urls[env],
 		keyConfig: keyConfig,
 		conns:     map[SvcType]*websocket.Conn{},
-		chanMap:   make(map[string]chan *WsResp),
+		chanMap:   make(map[string]chan *WsResp, 1000),
 	}
 }
 func connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
@@ -169,7 +169,6 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			log.Println("login success")
 			w.isLogin = true
 			w.push("login", v)
-			w.UnRegCh("login")
 			continue
 		} else if v.Event == "error" {
 			if v.Code == "60009" {
@@ -191,6 +190,8 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	if err != nil {
 		return err
 	}
+	w.l.Lock()
+	defer w.l.Unlock()
 	return conn.WriteJSON(req)
 }
 
@@ -233,4 +234,14 @@ func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
 		Op:   "unsubscribe",
 		Args: []*Arg{arg},
 	})
+}
+
+func (w *WsClient) Close() {
+	w.l.Lock()
+	defer w.l.Unlock()
+
+	for _, conn := range w.conns {
+		_ = conn.Close()
+	}
+	w.conns = map[SvcType]*websocket.Conn{}
 }

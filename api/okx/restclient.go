@@ -120,14 +120,16 @@ func makeUri(bs []byte) (uri string) {
 	query := map[string]interface{}{}
 	_ = json.Unmarshal(bs, &query)
 	if len(query) != 0 {
-		uri += "?"
 		var fields []string
 		for k, item := range query {
 			if item != "" {
 				fields = append(fields, fmt.Sprintf("%v=%v", k, item))
 			}
 		}
-		uri += strings.Join(fields, "&")
+		if len(fields) != 0 {
+			uri += "?"
+			uri += strings.Join(fields, "&")
+		}
 	}
 	return uri
 }
