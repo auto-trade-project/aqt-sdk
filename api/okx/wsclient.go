@@ -35,9 +35,12 @@ type WsClient struct {
 	keyConfig           KeyConfig
 	isLogin             bool
 	log                 Log
+	CloseListen         func()
+	ReadMonitor         func(arg Arg)
 }
 type Log struct {
 	Info  func(msg string)
+	Warn  func(msg string)
 	Error func(msg string)
 }
 
@@ -56,25 +59,30 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 		urls:      urls[env],
 		keyConfig: keyConfig,
 		conns:     map[SvcType]*websocket.Conn{},
-		chanMap:   make(map[string]chan *WsResp, 1000),
+		chanMap:   make(map[string]chan *WsResp, 1),
 		log: Log{
 			Info:  l,
+			Warn:  l,
 			Error: l,
 		},
+		CloseListen: func() {},
+		ReadMonitor: func(arg Arg) {},
 	}
 }
-func connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
+func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
 	conn, rp, err := websocket.DefaultDialer.DialContext(ctx, string(url), nil)
-	go heartbeat(conn)
+	go w.heartbeat(conn)
 	return conn, rp, err
 }
 
-func heartbeat(conn *websocket.Conn) {
+func (w *WsClient) heartbeat(conn *websocket.Conn) {
 	timer := time.NewTimer(time.Second * 20)
 	for {
 		<-timer.C
 		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
-		if err != nil {
+		closeError := websocket.CloseError{}
+		if errors.As(err, closeError) {
+			w.CloseListen()
 			return
 		}
 	}
@@ -83,12 +91,28 @@ func heartbeat(conn *websocket.Conn) {
 func (w *WsClient) SetLog(log Log) {
 	w.log = log
 }
+func (w *WsClient) Close() {
+	if w.l.TryLock() {
+		return
+	}
+	defer w.l.Unlock()
+
+	for k, conn := range w.conns {
+		_ = conn.Close()
+
+		delete(w.conns, k)
+	}
+	for k, c := range w.chanMap {
+		close(c)
+		delete(w.chanMap, k)
+	}
+}
 func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
-	w.l.RLock()
+	w.l.Lock()
+	defer w.l.Unlock()
 	conn, ok := w.conns[typ]
-	w.l.RUnlock()
 	if !ok {
-		c, rp, err := connect(w.ctx, w.urls[typ])
+		c, rp, err := w.connect(w.ctx, w.urls[typ])
 		if err != nil {
 			return nil, err
 		}
@@ -97,32 +121,27 @@ func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 		}
 		// 监听连接关闭,进行资源回收
 		c.SetCloseHandler(func(code int, text string) error {
-			w.l.Lock()
-			defer w.l.Unlock()
-
-			delete(w.conns, typ)
+			w.CloseListen()
 			return nil
 		})
 		conn = c
-		w.l.Lock()
-		defer w.l.Unlock()
 		w.conns[typ] = conn
 
 		go w.process(typ, conn)
 	}
 	return conn, nil
 }
-func (w *WsClient) push(channel string, resp *WsResp) {
+func (w *WsClient) push(typ SvcType, channel string, resp *WsResp) {
 	w.l.RLock()
 	defer w.l.RUnlock()
 	if ch, ok := w.chanMap[channel]; ok {
 		select {
 		case ch <- resp:
 		case <-time.After(time.Second * 3):
-			w.log.Info(fmt.Sprintf("ignore data: %v", resp))
+			w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, resp))
 		}
 	} else {
-		w.log.Info(fmt.Sprintf("ignore data: %v", resp))
+		w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, resp))
 	}
 }
 
@@ -160,13 +179,22 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 		_ = recover()
 	}()
 	for {
+		mtp, bs, err := conn.ReadMessage()
+		closeError := websocket.CloseError{}
+		if errors.As(err, closeError) {
+			w.CloseListen()
+			return
+		}
+		if mtp != websocket.TextMessage {
+			continue
+		}
 		v := &WsResp{}
-		err := conn.ReadJSON(v)
+		err = json.Unmarshal(bs, v)
 		if err != nil {
 			continue
 		}
-
-		bs, _ := json.Marshal(v.Arg)
+		w.ReadMonitor(v.Arg)
+		bs, err = json.Marshal(v.Arg)
 		hash := md5.New()
 		hash.Write(bs)
 		channel := hex.EncodeToString(hash.Sum(nil))
@@ -174,30 +202,29 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			if w.UnSubscribeCallback != nil {
 				w.UnSubscribeCallback()
 			}
-			continue
 		} else if v.Event == "subscribe" {
 			if w.SubscribeCallback != nil {
 				w.SubscribeCallback()
 			}
-			w.log.Info(fmt.Sprintf("%+v subscribe success", v.Arg))
+			w.log.Info(fmt.Sprintf("%s:%+v subscribe success", typ, v.Arg))
 			continue
 		} else if v.Event == "login" {
-			w.log.Info("login success")
+			w.log.Info(fmt.Sprintf("%s:login success", typ))
 			w.isLogin = true
-			w.push("login", v)
+			w.push(typ, "login", v)
 			continue
 		} else if v.Event == "error" {
 			if v.Code == "60009" {
-				w.push("login", v)
+				w.push(typ, "login", v)
 			}
-			w.log.Error(fmt.Sprintf("Service net '%s' read ws err: %v", typ, v))
+			w.log.Error(fmt.Sprintf("%s:read ws err: %v", typ, v))
 			continue
 		}
 		if v.Data == nil {
-			w.log.Info(fmt.Sprintf("ignore data: %v\n", v))
+			w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, v))
 			continue
 		}
-		w.push(channel, v)
+		w.push(typ, channel, v)
 	}
 }
 
@@ -212,7 +239,7 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	if err != nil {
 		return err
 	}
-	w.log.Info(string(bs))
+	w.log.Info(fmt.Sprintf("%s:send %s", typ, string(bs)))
 	return conn.WriteMessage(websocket.TextMessage, bs)
 }
 
@@ -227,12 +254,6 @@ func (w *WsClient) Subscribe(arg *Arg, typ SvcType, needLogin bool) (<-chan *WsR
 			return nil, errors.New(resp.Msg)
 		}
 	}
-	if err := w.Send(typ, Op{
-		Op:   "subscribe",
-		Args: []*Arg{arg},
-	}); err != nil {
-		return nil, err
-	}
 	bs, err := json.Marshal(arg)
 	if err != nil {
 		return nil, err
@@ -241,8 +262,14 @@ func (w *WsClient) Subscribe(arg *Arg, typ SvcType, needLogin bool) (<-chan *WsR
 	hash.Write(bs)
 	hex.EncodeToString(hash.Sum(nil))
 	respCh := make(chan *WsResp)
-	if respCh, isExist := w.RegCh(hex.EncodeToString(hash.Sum(nil)), respCh); isExist {
-		return respCh, nil
+	if ch, isExist := w.RegCh(hex.EncodeToString(hash.Sum(nil)), respCh); isExist {
+		respCh = ch
+	}
+	if err := w.Send(typ, Op{
+		Op:   "subscribe",
+		Args: []*Arg{arg},
+	}); err != nil {
+		return nil, err
 	}
 	return respCh, nil
 }
@@ -255,14 +282,4 @@ func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
 		Op:   "unsubscribe",
 		Args: []*Arg{arg},
 	})
-}
-
-func (w *WsClient) Close() {
-	w.l.Lock()
-	defer w.l.Unlock()
-
-	for _, conn := range w.conns {
-		_ = conn.Close()
-	}
-	w.conns = map[SvcType]*websocket.Conn{}
 }
