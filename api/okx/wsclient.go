@@ -80,8 +80,8 @@ func (w *WsClient) heartbeat(conn *websocket.Conn) {
 	for {
 		<-timer.C
 		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
-		closeError := websocket.CloseError{}
-		if errors.As(err, closeError) {
+		var closeError *websocket.CloseError
+		if errors.As(err, &closeError) {
 			w.CloseListen()
 			return
 		}

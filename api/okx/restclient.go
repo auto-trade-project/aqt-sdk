@@ -114,6 +114,9 @@ func (c RestClient) MakeRequest(ctx context.Context, method, url string, params 
 		header["x-simulated-trading"] = []string{"1"}
 	}
 	req.Header = header
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	return req
 }
 func makeUri(bs []byte) (uri string) {

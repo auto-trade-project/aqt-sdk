@@ -114,19 +114,18 @@ type WsResp struct {
 	Data   RawMessage `json:"data"`
 }
 type PlaceOrderReq struct {
-	ID         string  `json:"-"`
-	InstID     string  `json:"instId"`
-	Ccy        string  `json:"ccy,omitempty"`
-	ClOrdID    string  `json:"clOrdId,omitempty"`
-	Tag        string  `json:"tag,omitempty"`
-	ReduceOnly bool    `json:"reduceOnly,omitempty"`
-	Sz         float64 `json:"sz,string"`
-	Px         float64 `json:"px,omitempty,string"`
-	TdMode     string  `json:"tdMode"`
-	Side       string  `json:"side"`
-	PosSide    string  `json:"posSide,omitempty"`
-	OrdType    string  `json:"ordType"`
-	TgtCcy     string  `json:"tgtCcy,omitempty"`
+	InstID     string `json:"instId"`
+	Ccy        string `json:"ccy,omitempty"`
+	ClOrdID    string `json:"clOrdId,omitempty"`
+	Tag        string `json:"tag,omitempty"`
+	ReduceOnly bool   `json:"reduceOnly,omitempty"`
+	Sz         string `json:"sz,omitempty"`
+	Px         string `json:"px,omitempty"`
+	TdMode     string `json:"tdMode"`
+	Side       string `json:"side"`
+	PosSide    string `json:"posSide,omitempty"`
+	OrdType    string `json:"ordType"`
+	TgtCcy     string `json:"tgtCcy,omitempty"`
 }
 type InstrumentsReq struct {
 	InstType   string `json:"instType"`
