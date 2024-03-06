@@ -63,21 +63,33 @@ func (w *WsClient) UTrades(sprdId string) error {
 }
 
 // Orders 撮合交易订单频道
-func (w *WsClient) Orders(channel, instType, instFamily, instId string) (<-chan *WsResp, error) {
+func (w *WsClient) Orders(instType string) (<-chan *WsResp, error) {
 	return w.Subscribe(&Arg{
-		Channel:    channel,
-		InstType:   instType,
-		InstFamily: instFamily,
-		InstId:     instId,
+		Channel:  "orders",
+		InstType: instType,
 	}, Private, true)
 }
 
 // UOrders 取消订阅撮合交易订单频道
-func (w *WsClient) UOrders(channel, instType, instFamily, instId string) error {
+func (w *WsClient) UOrders(instType string) error {
 	return w.UnSubscribe(&Arg{
-		Channel:    channel,
-		InstType:   instType,
-		InstFamily: instFamily,
-		InstId:     instId,
+		Channel:  "orders",
+		InstType: instType,
+	}, Private)
+}
+
+// SpotOrders 撮合交易订单频道
+func (w *WsClient) SpotOrders() (<-chan *WsResp, error) {
+	return w.Subscribe(&Arg{
+		Channel:  "orders",
+		InstType: "SPOT",
+	}, Private, true)
+}
+
+// USpotOrders 取消订阅撮合交易订单频道
+func (w *WsClient) USpotOrders() error {
+	return w.UnSubscribe(&Arg{
+		Channel:  "orders",
+		InstType: "SPOT",
 	}, Private)
 }

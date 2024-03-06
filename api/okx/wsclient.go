@@ -202,12 +202,12 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			if w.UnSubscribeCallback != nil {
 				w.UnSubscribeCallback()
 			}
+			continue
 		} else if v.Event == "subscribe" {
 			if w.SubscribeCallback != nil {
 				w.SubscribeCallback()
 			}
 			w.log.Info(fmt.Sprintf("%s:%+v subscribe success", typ, v.Arg))
-			continue
 		} else if v.Event == "login" {
 			w.log.Info(fmt.Sprintf("%s:login success", typ))
 			w.isLogin = true
@@ -220,10 +220,10 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			w.log.Error(fmt.Sprintf("%s:read ws err: %v", typ, v))
 			continue
 		}
-		if v.Data == nil {
-			w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, v))
-			continue
-		}
+		//if v.Data == nil {
+		//	w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, v))
+		//	continue
+		//}
 		w.push(typ, channel, v)
 	}
 }
@@ -270,6 +270,27 @@ func (w *WsClient) Subscribe(arg *Arg, typ SvcType, needLogin bool) (<-chan *WsR
 		Args: []*Arg{arg},
 	}); err != nil {
 		return nil, err
+	}
+loop:
+	for {
+		select {
+		case <-time.After(time.Second * 3):
+			_ = w.Send(typ, Op{
+				Op:   "subscribe",
+				Args: []*Arg{arg},
+			})
+		case resp, ok := <-respCh:
+			if !ok {
+				time.Sleep(time.Second)
+				_ = w.Send(typ, Op{
+					Op:   "subscribe",
+					Args: []*Arg{arg},
+				})
+			}
+			if resp.Event == "subscribe" {
+				break loop
+			}
+		}
 	}
 	return respCh, nil
 }

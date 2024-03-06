@@ -97,11 +97,10 @@ type UnSubChannel struct {
 	InstId  string `json:"instId"`
 }
 type Arg struct {
-	Channel    string `json:"channel,omitempty"`
-	InstId     string `json:"instId,omitempty"`
-	InstType   string `json:"instType,omitempty"`
-	InstFamily string `json:"instFamily,omitempty"`
-	SprdId     string `json:"sprdId,omitempty"`
+	Channel  string `json:"channel,omitempty"`
+	InstId   string `json:"instId,omitempty"`
+	InstType string `json:"instType,omitempty"`
+	SprdId   string `json:"sprdId,omitempty"`
 }
 type Op struct {
 	Op   string `json:"op"`
