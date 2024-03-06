@@ -56,3 +56,28 @@ func (w *WsClient) Positions() (<-chan *WsResp, error) {
 func (w *WsClient) Trades(sprdId string) (<-chan *WsResp, error) {
 	return w.Subscribe(makeSprdArg("sprd-trades", sprdId), Business, true)
 }
+
+// UTrades 成交订单频道
+func (w *WsClient) UTrades(sprdId string) error {
+	return w.UnSubscribe(makeSprdArg("sprd-trades", sprdId), Business)
+}
+
+// Orders 撮合交易订单频道
+func (w *WsClient) Orders(channel, instType, instFamily, instId string) (<-chan *WsResp, error) {
+	return w.Subscribe(&Arg{
+		Channel:    channel,
+		InstType:   instType,
+		InstFamily: instFamily,
+		InstId:     instId,
+	}, Private, true)
+}
+
+// UOrders 取消订阅撮合交易订单频道
+func (w *WsClient) UOrders(channel, instType, instFamily, instId string) error {
+	return w.UnSubscribe(&Arg{
+		Channel:    channel,
+		InstType:   instType,
+		InstFamily: instFamily,
+		InstId:     instId,
+	}, Private)
+}

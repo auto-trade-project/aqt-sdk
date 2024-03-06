@@ -180,8 +180,8 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 	}()
 	for {
 		mtp, bs, err := conn.ReadMessage()
-		closeError := websocket.CloseError{}
-		if errors.As(err, closeError) {
+		var closeError *websocket.CloseError
+		if errors.As(err, &closeError) {
 			w.CloseListen()
 			return
 		}
