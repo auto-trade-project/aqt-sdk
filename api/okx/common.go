@@ -106,13 +106,21 @@ type Op struct {
 	Op   string `json:"op"`
 	Args any    `json:"args"`
 }
-type WsResp struct {
+type WsOriginResp struct {
 	Event  string     `json:"event"`
 	ConnId string     `json:"connId"`
 	Code   string     `json:"code"`
 	Msg    string     `json:"msg"`
 	Arg    Arg        `json:"arg"`
 	Data   RawMessage `json:"data"`
+}
+type WsResp[T any] struct {
+	Event  string `json:"event"`
+	ConnId string `json:"connId"`
+	Code   string `json:"code"`
+	Msg    string `json:"msg"`
+	Arg    Arg    `json:"arg"`
+	Data   []T    `json:"data"`
 }
 type PlaceOrderReq struct {
 	InstID     string `json:"instId"`
@@ -434,6 +442,30 @@ type Balances struct {
 	Bal       string `json:"bal"`
 	FrozenBal string `json:"frozenBal"`
 	AvailBal  string `json:"availBal"`
+}
+type Trades struct {
+	SprdId   string `json:"sprdId"`
+	TradeId  string `json:"tradeId"`
+	OrdId    string `json:"ordId"`
+	ClOrdId  string `json:"clOrdId"`
+	Tag      string `json:"tag"`
+	FillPx   string `json:"fillPx"`
+	FillSz   string `json:"fillSz"`
+	State    string `json:"state"`
+	Side     string `json:"side"`
+	ExecType string `json:"execType"`
+	Ts       string `json:"ts"`
+	Legs     []struct {
+		InstId  string `json:"instId"`
+		Px      string `json:"px"`
+		Sz      string `json:"sz"`
+		Side    string `json:"side"`
+		Fee     string `json:"fee"`
+		FeeCcy  string `json:"feeCcy"`
+		TradeId string `json:"tradeId"`
+	} `json:"legs"`
+	Code string `json:"code"`
+	Msg  string `json:"msg"`
 }
 type Balance struct {
 	AdjEq      string `json:"adjEq"`

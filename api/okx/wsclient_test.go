@@ -2,7 +2,6 @@ package okx
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -25,21 +24,15 @@ func TestNewWsClient(t *testing.T) {
 	count := 2
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		ch, err := client.Trades("BTC-USDT_BTC-USDT-240329")
-		if err != nil {
-			assert.Fail(t, err.Error())
-			return
-		}
-		for {
-			resp, ok := <-ch
-			if !ok {
-				return
-			}
-			fmt.Println(*resp)
+		if err := client.Trades("BTC-USDT_BTC-USDT-240329", func(resp *WsResp[Trades]) {
+			t.Log(*resp)
 			cond.L.Lock()
 			count--
 			cond.Broadcast()
 			cond.L.Unlock()
+		}); err != nil {
+			assert.Fail(t, err.Error())
+			return
 		}
 	}()
 	//go func() {
