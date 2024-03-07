@@ -30,7 +30,9 @@ type WsClient struct {
 	conns               map[SvcType]*websocket.Conn
 	SubscribeCallback   func()
 	UnSubscribeCallback func()
-	l                   sync.RWMutex
+	connLock            sync.RWMutex
+	loginLock           sync.RWMutex
+	chanLock            sync.RWMutex
 	chanMap             map[string]chan *WsResp
 	keyConfig           KeyConfig
 	isLogin             bool
@@ -92,10 +94,10 @@ func (w *WsClient) SetLog(log Log) {
 	w.log = log
 }
 func (w *WsClient) Close() {
-	if w.l.TryLock() {
+	if w.connLock.TryLock() {
 		return
 	}
-	defer w.l.Unlock()
+	defer w.connLock.Unlock()
 
 	for k, conn := range w.conns {
 		_ = conn.Close()
@@ -108,8 +110,8 @@ func (w *WsClient) Close() {
 	}
 }
 func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
-	w.l.Lock()
-	defer w.l.Unlock()
+	w.connLock.Lock()
+	defer w.connLock.Unlock()
 	conn, ok := w.conns[typ]
 	if !ok {
 		c, rp, err := w.connect(w.ctx, w.urls[typ])
@@ -132,22 +134,22 @@ func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 	return conn, nil
 }
 func (w *WsClient) push(typ SvcType, channel string, resp *WsResp) {
-	w.l.RLock()
-	defer w.l.RUnlock()
+	w.connLock.RLock()
+	defer w.connLock.RUnlock()
 	if ch, ok := w.chanMap[channel]; ok {
 		select {
 		case ch <- resp:
 		case <-time.After(time.Second * 3):
-			w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, resp))
+			w.log.Warn(fmt.Sprintf("%s:insert channel timeout, ignore data: %+v", typ, resp))
 		}
 	} else {
-		w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, resp))
+		w.log.Warn(fmt.Sprintf("%s:not found channel, ignore data: %+v", typ, resp))
 	}
 }
 
 func (w *WsClient) RegCh(channel string, c chan *WsResp) (chan *WsResp, bool) {
-	w.l.Lock()
-	defer w.l.Unlock()
+	w.chanLock.Lock()
+	defer w.chanLock.Unlock()
 
 	if ch, ok := w.chanMap[channel]; ok {
 		return ch, true
@@ -157,8 +159,8 @@ func (w *WsClient) RegCh(channel string, c chan *WsResp) (chan *WsResp, bool) {
 	return w.chanMap[channel], false
 }
 func (w *WsClient) GetCh(channel string) (chan *WsResp, bool) {
-	w.l.Lock()
-	defer w.l.Unlock()
+	w.chanLock.RLock()
+	defer w.chanLock.RUnlock()
 	if respCh, ok := w.chanMap[channel]; ok {
 		return respCh, ok
 	}
@@ -166,8 +168,8 @@ func (w *WsClient) GetCh(channel string) (chan *WsResp, bool) {
 }
 
 func (w *WsClient) UnRegCh(channel string) {
-	w.l.Lock()
-	defer w.l.Unlock()
+	w.chanLock.Lock()
+	defer w.chanLock.Unlock()
 
 	if respCh, ok := w.chanMap[channel]; ok {
 		close(respCh)
@@ -233,8 +235,6 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	if err != nil {
 		return err
 	}
-	w.l.Lock()
-	defer w.l.Unlock()
 	bs, err := json.Marshal(req)
 	if err != nil {
 		return err
@@ -245,6 +245,8 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 
 func (w *WsClient) Subscribe(arg *Arg, typ SvcType, needLogin bool) (<-chan *WsResp, error) {
 	if needLogin && !w.isLogin {
+		w.loginLock.Lock()
+		defer w.loginLock.Unlock()
 		ch, err := w.Login(typ)
 		if err != nil {
 			return nil, err
