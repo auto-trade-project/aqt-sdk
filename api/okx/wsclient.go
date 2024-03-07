@@ -35,7 +35,7 @@ type WsClient struct {
 	chanLock            sync.RWMutex
 	chanMap             map[string]chan *WsResp
 	keyConfig           KeyConfig
-	isLogin             bool
+	isLogin             map[SvcType]bool
 	log                 Log
 	CloseListen         func()
 	ReadMonitor         func(arg Arg)
@@ -212,7 +212,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			w.log.Info(fmt.Sprintf("%s:%+v subscribe success", typ, v.Arg))
 		} else if v.Event == "login" {
 			w.log.Info(fmt.Sprintf("%s:login success", typ))
-			w.isLogin = true
+			w.isLogin[typ] = true
 			w.push(typ, "login", v)
 			continue
 		} else if v.Event == "error" {
@@ -243,17 +243,27 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	return conn.WriteMessage(websocket.TextMessage, bs)
 }
 
+func (w *WsClient) login(typ SvcType) error {
+	w.loginLock.Lock()
+	defer w.loginLock.Unlock()
+
+	if w.isLogin[typ] {
+		return nil
+	}
+	ch, err := w.Login(typ)
+	if err != nil {
+		return err
+	}
+	resp := <-ch
+	if resp.Event == "error" || !w.isLogin[typ] {
+		return errors.New(resp.Msg)
+	}
+	return nil
+}
 func (w *WsClient) Subscribe(arg *Arg, typ SvcType, needLogin bool) (<-chan *WsResp, error) {
-	if needLogin && !w.isLogin {
-		w.loginLock.Lock()
-		defer w.loginLock.Unlock()
-		ch, err := w.Login(typ)
-		if err != nil {
+	if needLogin && !w.isLogin[typ] {
+		if err := w.login(typ); err != nil {
 			return nil, err
-		}
-		resp := <-ch
-		if resp.Event == "error" || !w.isLogin {
-			return nil, errors.New(resp.Msg)
 		}
 	}
 	bs, err := json.Marshal(arg)
@@ -298,7 +308,7 @@ loop:
 }
 
 func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
-	if typ == Private && !w.isLogin {
+	if typ == Private && !w.isLogin[typ] {
 		return nil
 	}
 	return w.Send(typ, Op{
