@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,8 @@ type RestClient struct {
 	cancel    context.CancelFunc
 	keyConfig KeyConfig
 	isTest    bool
+	limitReq  int
+	locker    sync.RWMutex
 }
 
 func NewRestClient(ctx context.Context, keyConfig KeyConfig, env Destination) *RestClient {
@@ -74,13 +77,13 @@ func (c KeyConfig) makeSign(now, method, requestPath string, body []byte) (sign 
 	hash.Write(append([]byte(now+method+requestPath), body...))
 	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
 }
-func Get[T any](c RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
+func Get[T any](c *RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
 	return Do[T](c, c.MakeRequest(ctx, http.MethodGet, url, params))
 }
-func Post[T any](c RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
+func Post[T any](c *RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
 	return Do[T](c, c.MakeRequest(ctx, http.MethodPost, url, params))
 }
-func Do[T any](c RestClient, req *http.Request) (*Resp[T], error) {
+func Do[T any](c *RestClient, req *http.Request) (*Resp[T], error) {
 	rp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err

@@ -73,6 +73,9 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 }
 func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
 	conn, rp, err := websocket.DefaultDialer.DialContext(ctx, string(url), nil)
+	if err != nil {
+		return nil, nil, err
+	}
 	go w.heartbeat(conn)
 	return conn, rp, err
 }
@@ -82,8 +85,7 @@ func (w *WsClient) heartbeat(conn *websocket.Conn) {
 	for {
 		<-timer.C
 		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
-		var closeError *websocket.CloseError
-		if errors.As(err, &closeError) {
+		if err != nil {
 			w.Close()
 			return
 		}
@@ -179,8 +181,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 	}()
 	for {
 		mtp, bs, err := conn.ReadMessage()
-		var closeError *websocket.CloseError
-		if errors.As(err, &closeError) {
+		if err != nil {
 			w.Close()
 			return
 		}
@@ -235,6 +236,9 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	w.log.Info(fmt.Sprintf("%s:send %s", typ, string(bs)))
 	w.connLock.Lock()
 	defer w.connLock.Unlock()
+	if w.isClose {
+		return errors.New("conn is close")
+	}
 	return conn.WriteMessage(websocket.TextMessage, bs)
 }
 
