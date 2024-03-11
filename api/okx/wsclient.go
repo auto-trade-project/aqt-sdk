@@ -31,6 +31,7 @@ type WsClient struct {
 	connLock            sync.RWMutex
 	loginLock           sync.RWMutex
 	chanLock            sync.RWMutex
+	subscribeLock       sync.RWMutex
 	callbackMap         map[string]func(*WsOriginResp)
 	keyConfig           KeyConfig
 	isLogin             map[SvcType]bool
@@ -146,16 +147,11 @@ func (w *WsClient) push(typ SvcType, channel string, resp *WsOriginResp) {
 	}
 }
 
-func (w *WsClient) RegCallback(channel string, c func(*WsOriginResp)) (func(*WsOriginResp), bool) {
+func (w *WsClient) RegCallback(channel string, c func(*WsOriginResp)) {
 	w.chanLock.Lock()
 	defer w.chanLock.Unlock()
 
-	if callback, ok := w.callbackMap[channel]; ok {
-		return callback, true
-	} else {
-		w.callbackMap[channel] = c
-	}
-	return w.callbackMap[channel], false
+	w.callbackMap[channel] = c
 }
 func (w *WsClient) GetCallback(channel string) (func(*WsOriginResp), bool) {
 	w.chanLock.RLock()
@@ -264,6 +260,9 @@ func (w *WsClient) login(typ SvcType) error {
 	return nil
 }
 func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *WsResp[T]), needLogin bool) error {
+	w.subscribeLock.Lock()
+	defer w.subscribeLock.Unlock()
+
 	if needLogin && !w.isLogin[typ] {
 		if err := w.login(typ); err != nil {
 			return err
