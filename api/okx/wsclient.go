@@ -81,11 +81,12 @@ func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *
 }
 
 func (w *WsClient) heartbeat(conn *websocket.Conn) {
-	timer := time.NewTimer(time.Second * 20)
+	timer := time.NewTicker(time.Second * 20)
 	for {
 		<-timer.C
 		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
 		if err != nil {
+			w.log.Error(err.Error())
 			w.Close()
 			return
 		}
@@ -182,6 +183,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 	for {
 		mtp, bs, err := conn.ReadMessage()
 		if err != nil {
+			w.log.Error(err.Error())
 			w.Close()
 			return
 		}
