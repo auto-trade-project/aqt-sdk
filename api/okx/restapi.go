@@ -46,6 +46,26 @@ func (c *RestClient) Balances(ctx context.Context, ccy string) (*Resp[Balances],
 	})
 }
 
+// LoanRatio 获取多空比
+func (c *RestClient) LoanRatio(ctx context.Context, ccy, begin, end, period string) (*Resp[[]string], error) {
+	return Get[[]string](c, ctx, "/api/v5/rubik/stat/margin/loan-ratio", map[string]string{
+		"ccy":    ccy,
+		"begin":  begin,
+		"end":    end,
+		"period": period,
+	})
+}
+
+// LongShortAccountRatio 获取合约多空持仓人数比
+func (c *RestClient) LongShortAccountRatio(ctx context.Context, ccy, begin, end, period string) (*Resp[[]string], error) {
+	return Get[[]string](c, ctx, "/api/v5/rubik/stat/contracts/long-short-account-ratio", map[string]string{
+		"ccy":    ccy,
+		"begin":  begin,
+		"end":    end,
+		"period": period,
+	})
+}
+
 //-------------------------- 交易 --------------------------
 
 // Balance 交易账户余额
