@@ -9,6 +9,14 @@ func (c *RestClient) PlaceOrder(ctx context.Context, req PlaceOrderReq) (*Resp[P
 	return Post[PlaceOrder](c, ctx, "/api/v5/trade/order", req)
 }
 
+// CancelOrder 取消挂单信息
+func (c *RestClient) CancelOrder(ctx context.Context, instId, clOrdId string) (*Resp[PlaceOrder], error) {
+	return Get[PlaceOrder](c, ctx, "/api/v5/trade/cancel-order", map[string]string{
+		"clOrdId": clOrdId,
+		"instId":  instId,
+	})
+}
+
 // GetOrder 获取订单信息
 func (c *RestClient) GetOrder(ctx context.Context, req PlaceOrderReq) (*Resp[Order], error) {
 	return Get[Order](c, ctx, "/api/v5/trade/order", req)
