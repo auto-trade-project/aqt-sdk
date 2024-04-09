@@ -84,12 +84,17 @@ func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *
 func (w *WsClient) heartbeat(conn *websocket.Conn) {
 	timer := time.NewTicker(time.Second * 20)
 	for {
-		<-timer.C
-		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
-		if err != nil {
-			w.log.Error(err.Error())
-			w.Close()
+		select {
+		case <-w.ctx.Done():
 			return
+		case <-timer.C:
+			conn.SetWriteDeadline(time.Now().Add(time.Second))
+			err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
+			if err != nil {
+				w.log.Error(err.Error())
+				w.Close()
+				return
+			}
 		}
 	}
 }
@@ -177,6 +182,11 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 		}
 	}()
 	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		default:
+		}
 		mtp, bs, err := conn.ReadMessage()
 		if err != nil {
 			w.log.Error(err.Error())
@@ -237,6 +247,7 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	if w.isClose {
 		return errors.New("conn is close")
 	}
+	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
 	return conn.WriteMessage(websocket.TextMessage, bs)
 }
 
@@ -268,7 +279,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 			return err
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(w.ctx)
 	w.RegCallback(arg.Channel, func(resp *WsOriginResp) {
 		if resp.Event == "subscribe" {
 			cancel()
