@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -26,25 +27,33 @@ type RestClient struct {
 	locker    sync.RWMutex
 }
 
-func NewRestClient(ctx context.Context, keyConfig KeyConfig, env Destination) *RestClient {
-	return NewRestClientWithCustom(ctx, keyConfig, env, DefaultRestUrl)
+func NewRestClient(ctx context.Context, keyConfig KeyConfig, env Destination, proxy ...string) *RestClient {
+	return NewRestClientWithCustom(ctx, keyConfig, env, DefaultRestUrl, proxy...)
 }
 
-func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]BaseURL) *RestClient {
+func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]BaseURL, proxy ...string) *RestClient {
 	ctx, cancel := context.WithCancel(ctx)
-	url, ok := urls[env]
+	baseUrl, ok := urls[env]
 	if !ok {
 		panic("not support env")
+	}
+	proxyURL := http.ProxyFromEnvironment
+	if len(proxy) != 0 && proxy[0] != "" {
+		parse, err := url.Parse(proxy[0])
+		if err != nil {
+			panic(err.Error())
+		}
+		proxyURL = http.ProxyURL(parse)
 	}
 	return &RestClient{
 		ctx:       ctx,
 		cancel:    cancel,
-		baseUrl:   url,
+		baseUrl:   baseUrl,
 		keyConfig: keyConfig,
 		isTest:    env == TestServer,
 		client: &http.Client{
 			Transport: &http.Transport{
-				Proxy: http.ProxyFromEnvironment,
+				Proxy: proxyURL,
 			},
 			Timeout: 30 * time.Second,
 		}}

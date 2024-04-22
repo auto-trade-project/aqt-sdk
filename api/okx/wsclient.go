@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -39,6 +40,7 @@ type WsClient struct {
 	CloseListen         func()
 	ReadMonitor         func(arg Arg)
 	isClose             bool
+	proxy               func(*http.Request) (*url.URL, error)
 }
 type Log struct {
 	Info  func(msg string)
@@ -46,14 +48,22 @@ type Log struct {
 	Error func(msg string)
 }
 
-func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination) *WsClient {
-	return NewWsClientWithCustom(ctx, keyConfig, env, DefaultWsUrls)
+func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination, proxy ...string) *WsClient {
+	return NewWsClientWithCustom(ctx, keyConfig, env, DefaultWsUrls, proxy...)
 }
 
-func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]map[SvcType]BaseURL) *WsClient {
+func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]map[SvcType]BaseURL, proxy ...string) *WsClient {
 	ctx, cancel := context.WithCancel(ctx)
 	l := func(msg string) {
 		log.Println(msg)
+	}
+	proxyURL := http.ProxyFromEnvironment
+	if len(proxy) != 0 && proxy[0] != "" {
+		parse, err := url.Parse(proxy[0])
+		if err != nil {
+			panic(err.Error())
+		}
+		proxyURL = http.ProxyURL(parse)
 	}
 	return &WsClient{
 		ctx:         ctx,
@@ -70,10 +80,13 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 		},
 		CloseListen: func() {},
 		ReadMonitor: func(arg Arg) {},
+		proxy:       proxyURL,
 	}
 }
 func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
-	conn, rp, err := websocket.DefaultDialer.DialContext(ctx, string(url), nil)
+	dialer := websocket.DefaultDialer
+	dialer.Proxy = w.proxy
+	conn, rp, err := dialer.DialContext(ctx, string(url), nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -83,6 +96,7 @@ func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *
 
 func (w *WsClient) heartbeat(conn *websocket.Conn) {
 	timer := time.NewTicker(time.Second * 20)
+	defer timer.Stop()
 	for {
 		select {
 		case <-w.ctx.Done():
