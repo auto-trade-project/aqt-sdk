@@ -131,8 +131,8 @@ func (w *WsClient) Close() {
 	for k, _ := range w.callbackMap {
 		delete(w.callbackMap, k)
 	}
-	w.CloseListen()
 	w.isClose = true
+	w.CloseListen()
 }
 func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 	w.connLock.Lock()
@@ -207,12 +207,13 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			w.Close()
 			return
 		}
-		if mtp != websocket.TextMessage {
+		if mtp != websocket.TextMessage || string(bs) == "pong" {
 			continue
 		}
 		v := &WsOriginResp{}
 		err = json.Unmarshal(bs, v)
 		if err != nil {
+			w.log.Error(fmt.Sprintf("msg:%v, data:%s", err.Error(), string(bs)))
 			continue
 		}
 		w.ReadMonitor(v.Arg)
