@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type (
@@ -102,6 +103,11 @@ type Arg struct {
 	InstType string `json:"instType,omitempty"`
 	SprdId   string `json:"sprdId,omitempty"`
 }
+
+func (a Arg) Key() string {
+	return strings.Join([]string{a.Channel, a.InstId, a.InstType, a.SprdId}, "-")
+}
+
 type Op struct {
 	Op   string `json:"op"`
 	Args any    `json:"args"`

@@ -21,10 +21,20 @@ func TestNewWsClient(t *testing.T) {
 		config,
 		TestServer,
 	)
-	count := 2
+	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.Trades("BTC-USDT_BTC-USDT-240329", func(resp *WsResp[Trades]) {
+		if err := client.MarkPrice("BTC-USDT", func(resp *WsResp[*MarkPrice]) {
+			t.Log((*resp.Data[0]).MarkPx)
+			cond.L.Lock()
+			count--
+			cond.Broadcast()
+			cond.L.Unlock()
+		}); err != nil {
+			assert.Fail(t, err.Error())
+			return
+		}
+		if err := client.MarkPrice("SOL-USDT", func(resp *WsResp[*MarkPrice]) {
 			t.Log(*resp)
 			cond.L.Lock()
 			count--

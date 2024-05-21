@@ -22,6 +22,37 @@ const (
 	Business SvcType = "Business"
 )
 
+type ILogger interface {
+	Infof(template string, args ...interface{})
+	Debugf(template string, args ...interface{})
+	Warnf(template string, args ...interface{})
+	Errorf(template string, args ...interface{})
+	Panicf(template string, args ...interface{})
+}
+
+type DefaultLogger struct {
+}
+
+func (w DefaultLogger) Infof(template string, args ...interface{}) {
+	log.Printf(template, args...)
+}
+
+func (w DefaultLogger) Debugf(template string, args ...interface{}) {
+	log.Printf(template, args...)
+}
+
+func (w DefaultLogger) Warnf(template string, args ...interface{}) {
+	log.Printf(template, args...)
+}
+
+func (w DefaultLogger) Errorf(template string, args ...interface{}) {
+	log.Printf(template, args...)
+}
+
+func (w DefaultLogger) Panicf(template string, args ...interface{}) {
+	log.Printf(template, args...)
+}
+
 type WsClient struct {
 	ctx                 context.Context
 	cancel              func()
@@ -36,16 +67,11 @@ type WsClient struct {
 	callbackMap         map[string]func(*WsOriginResp)
 	keyConfig           KeyConfig
 	isLogin             map[SvcType]bool
-	log                 Log
+	log                 ILogger
 	CloseListen         func()
 	ReadMonitor         func(arg Arg)
 	isClose             bool
 	proxy               func(*http.Request) (*url.URL, error)
-}
-type Log struct {
-	Info  func(msg string)
-	Warn  func(msg string)
-	Error func(msg string)
 }
 
 func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination, proxy ...string) *WsClient {
@@ -54,9 +80,6 @@ func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination, prox
 
 func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destination, urls map[Destination]map[SvcType]BaseURL, proxy ...string) *WsClient {
 	ctx, cancel := context.WithCancel(ctx)
-	l := func(msg string) {
-		log.Println(msg)
-	}
 	proxyURL := http.ProxyFromEnvironment
 	if len(proxy) != 0 && proxy[0] != "" {
 		parse, err := url.Parse(proxy[0])
@@ -73,11 +96,7 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 		conns:       map[SvcType]*websocket.Conn{},
 		callbackMap: make(map[string]func(resp *WsOriginResp)),
 		isLogin:     make(map[SvcType]bool),
-		log: Log{
-			Info:  l,
-			Warn:  l,
-			Error: l,
-		},
+		log:         DefaultLogger{},
 		CloseListen: func() {},
 		ReadMonitor: func(arg Arg) {},
 		proxy:       proxyURL,
@@ -105,7 +124,7 @@ func (w *WsClient) heartbeat(conn *websocket.Conn) {
 			conn.SetWriteDeadline(time.Now().Add(time.Second))
 			err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
 			if err != nil {
-				w.log.Error(err.Error())
+				w.log.Errorf(err.Error())
 				w.Close()
 				return
 			}
@@ -113,7 +132,7 @@ func (w *WsClient) heartbeat(conn *websocket.Conn) {
 	}
 }
 
-func (w *WsClient) SetLog(log Log) {
+func (w *WsClient) SetLog(log ILogger) {
 	w.log = log
 }
 func (w *WsClient) Close() {
@@ -158,11 +177,11 @@ func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 	}
 	return conn, nil
 }
-func (w *WsClient) push(typ SvcType, channel string, resp *WsOriginResp) {
-	if callback, ok := w.GetCallback(channel); ok {
+func (w *WsClient) push(typ SvcType, arg Arg, resp *WsOriginResp) {
+	if callback, ok := w.GetCallback(arg.Key()); ok {
 		callback(resp)
 	} else {
-		w.log.Warn(fmt.Sprintf("%s:not found channel, ignore data: %+v", typ, resp))
+		w.log.Warnf(fmt.Sprintf("%s:not found channel, ignore data: %+v", typ, resp))
 	}
 }
 
@@ -175,6 +194,7 @@ func (w *WsClient) RegCallback(channel string, c func(*WsOriginResp)) {
 func (w *WsClient) GetCallback(channel string) (func(*WsOriginResp), bool) {
 	w.chanLock.RLock()
 	defer w.chanLock.RUnlock()
+
 	if respCh, ok := w.callbackMap[channel]; ok {
 		return respCh, ok
 	}
@@ -192,7 +212,7 @@ func (w *WsClient) UnRegCh(channel string) {
 func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 	defer func() {
 		if err := recover(); err != nil {
-			w.log.Error(fmt.Sprintf("%v", err))
+			w.log.Errorf(fmt.Sprintf("%v", err))
 		}
 	}()
 	for {
@@ -203,7 +223,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 		}
 		mtp, bs, err := conn.ReadMessage()
 		if err != nil {
-			w.log.Error(err.Error())
+			w.log.Errorf(err.Error())
 			w.Close()
 			return
 		}
@@ -213,7 +233,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 		v := &WsOriginResp{}
 		err = json.Unmarshal(bs, v)
 		if err != nil {
-			w.log.Error(fmt.Sprintf("msg:%v, data:%s", err.Error(), string(bs)))
+			w.log.Errorf(fmt.Sprintf("msg:%v, data:%s", err.Error(), string(bs)))
 			continue
 		}
 		w.ReadMonitor(v.Arg)
@@ -226,24 +246,18 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			if w.SubscribeCallback != nil {
 				w.SubscribeCallback()
 			}
-			w.log.Info(fmt.Sprintf("%s:%+v subscribe success", typ, v.Arg))
+			w.log.Infof(fmt.Sprintf("%s:%+v subscribe success", typ, v.Arg))
 		} else if v.Event == "login" {
-			w.log.Info(fmt.Sprintf("%s:login success", typ))
+			w.log.Infof(fmt.Sprintf("%s:login success", typ))
 			w.isLogin[typ] = true
-			w.push(typ, "login", v)
-			continue
+			v.Arg.Channel = "login"
 		} else if v.Event == "error" {
 			if v.Code == "60009" {
-				w.push(typ, "login", v)
+				v.Arg.Channel = "login"
 			}
-			w.log.Error(fmt.Sprintf("%s:read ws err: %v", typ, v))
-			continue
+			w.log.Errorf(fmt.Sprintf("%s:read ws err: %v", typ, v))
 		}
-		//if v.Data == nil {
-		//	w.log.Warn(fmt.Sprintf("%s:ignore data: %+v", typ, v))
-		//	continue
-		//}
-		w.push(typ, v.Arg.Channel, v)
+		w.push(typ, v.Arg, v)
 	}
 }
 
@@ -256,7 +270,7 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	if err != nil {
 		return err
 	}
-	w.log.Info(fmt.Sprintf("%s:send %s", typ, string(bs)))
+	w.log.Infof(fmt.Sprintf("%s:send %s", typ, string(bs)))
 	w.connLock.Lock()
 	defer w.connLock.Unlock()
 	if w.isClose {
@@ -295,7 +309,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 		}
 	}
 	ctx, cancel := context.WithCancel(w.ctx)
-	w.RegCallback(arg.Channel, func(resp *WsOriginResp) {
+	w.RegCallback(arg.Key(), func(resp *WsOriginResp) {
 		if resp.Event == "subscribe" {
 			cancel()
 			return
@@ -303,7 +317,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 		var t []T
 		err := json.Unmarshal(resp.Data, &t)
 		if err != nil {
-			w.log.Error(err.Error())
+			w.log.Errorf(err.Error())
 		}
 		callback(&WsResp[T]{
 			Event:  resp.Event,
