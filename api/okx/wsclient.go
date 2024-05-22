@@ -172,6 +172,9 @@ func (w *WsClient) SetCloseListen(closeListen func()) {
 }
 func (w *WsClient) SetLog(log ILogger) {
 	w.log = log
+	for _, conn := range w.conns {
+		conn.log = log
+	}
 }
 func (w *WsClient) Close() {
 
