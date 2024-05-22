@@ -81,7 +81,6 @@ type WsClient struct {
 	chanLock            sync.RWMutex
 	subscribeLock       sync.RWMutex
 	keyConfig           KeyConfig
-	isLogin             map[SvcType]bool
 	log                 ILogger
 	closeListen         func()
 	readMonitor         func(arg Arg)
@@ -123,7 +122,6 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 		cancel:      cancel,
 		keyConfig:   keyConfig,
 		conns:       conns,
-		isLogin:     make(map[SvcType]bool),
 		log:         DefaultLogger{},
 		closeListen: func() {},
 		readMonitor: func(arg Arg) {},
@@ -331,7 +329,7 @@ func (w *WsClient) login(typ SvcType) error {
 	w.loginLock.Lock()
 	defer w.loginLock.Unlock()
 
-	if w.isLogin[typ] {
+	if w.conns[typ].isLogin {
 		return nil
 	}
 	c := make(chan *WsOriginResp, 1)
@@ -341,7 +339,7 @@ func (w *WsClient) login(typ SvcType) error {
 		return err
 	}
 	resp := <-c
-	if resp.Event == "error" || !w.isLogin[typ] {
+	if resp.Event == "error" || !w.conns[typ].isLogin {
 		return errors.New(resp.Msg)
 	}
 	return nil
@@ -350,7 +348,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 	w.subscribeLock.Lock()
 	defer w.subscribeLock.Unlock()
 
-	if needLogin && !w.isLogin[typ] {
+	if needLogin && !w.conns[typ].isLogin {
 		if err := w.login(typ); err != nil {
 			return err
 		}
@@ -395,7 +393,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 }
 
 func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
-	if typ == Private && !w.isLogin[typ] {
+	if typ == Private && !w.conns[typ].isLogin {
 		return nil
 	}
 	return w.Send(typ, Op{
