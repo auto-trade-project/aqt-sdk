@@ -53,24 +53,38 @@ func (w DefaultLogger) Panicf(template string, args ...interface{}) {
 	log.Printf(template, args...)
 }
 
-type WsClient struct {
+type WsClientConn struct {
 	ctx                 context.Context
 	cancel              func()
-	urls                map[SvcType]BaseURL
-	conns               map[SvcType]*websocket.Conn
+	typ                 SvcType
+	url                 BaseURL
+	conn                *websocket.Conn
+	SubscribeCallback   func()
+	UnSubscribeCallback func()
+	callbackMap         map[string]func(*WsOriginResp)
+	isLogin             bool
+	log                 ILogger
+	proxy               func(*http.Request) (*url.URL, error)
+	isClose             bool
+	chanLock            sync.RWMutex
+	readMonitor         func(arg Arg)
+	closeListen         func()
+}
+type WsClient struct {
+	conns               map[SvcType]*WsClientConn
+	ctx                 context.Context
+	cancel              func()
 	SubscribeCallback   func()
 	UnSubscribeCallback func()
 	connLock            sync.RWMutex
 	loginLock           sync.RWMutex
 	chanLock            sync.RWMutex
 	subscribeLock       sync.RWMutex
-	callbackMap         map[string]func(*WsOriginResp)
 	keyConfig           KeyConfig
 	isLogin             map[SvcType]bool
 	log                 ILogger
-	CloseListen         func()
-	ReadMonitor         func(arg Arg)
-	isClose             bool
+	closeListen         func()
+	readMonitor         func(arg Arg)
 	proxy               func(*http.Request) (*url.URL, error)
 }
 
@@ -88,21 +102,35 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 		}
 		proxyURL = http.ProxyURL(parse)
 	}
+	conns := map[SvcType]*WsClientConn{}
+	for svcType, baseURL := range urls[env] {
+		conns[svcType] = &WsClientConn{
+			ctx:                 ctx,
+			cancel:              cancel,
+			typ:                 svcType,
+			url:                 baseURL,
+			SubscribeCallback:   func() {},
+			UnSubscribeCallback: func() {},
+			callbackMap:         make(map[string]func(*WsOriginResp)),
+			log:                 DefaultLogger{},
+			proxy:               proxyURL,
+			readMonitor:         func(Arg) {},
+			closeListen:         func() {},
+		}
+	}
 	return &WsClient{
 		ctx:         ctx,
 		cancel:      cancel,
-		urls:        urls[env],
 		keyConfig:   keyConfig,
-		conns:       map[SvcType]*websocket.Conn{},
-		callbackMap: make(map[string]func(resp *WsOriginResp)),
+		conns:       conns,
 		isLogin:     make(map[SvcType]bool),
 		log:         DefaultLogger{},
-		CloseListen: func() {},
-		ReadMonitor: func(arg Arg) {},
+		closeListen: func() {},
+		readMonitor: func(arg Arg) {},
 		proxy:       proxyURL,
 	}
 }
-func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
+func (w *WsClientConn) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
 	dialer := websocket.DefaultDialer
 	dialer.Proxy = w.proxy
 	conn, rp, err := dialer.DialContext(ctx, string(url), nil)
@@ -113,7 +141,7 @@ func (w *WsClient) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *
 	return conn, rp, err
 }
 
-func (w *WsClient) heartbeat(conn *websocket.Conn) {
+func (w *WsClientConn) heartbeat(conn *websocket.Conn) {
 	timer := time.NewTicker(time.Second * 20)
 	defer timer.Stop()
 	for {
@@ -132,33 +160,44 @@ func (w *WsClient) heartbeat(conn *websocket.Conn) {
 	}
 }
 
+func (w *WsClient) SetReadMonitor(readMonitor func(arg Arg)) {
+	w.readMonitor = readMonitor
+	for _, conn := range w.conns {
+		conn.readMonitor = readMonitor
+	}
+}
+func (w *WsClient) SetCloseListen(closeListen func()) {
+	w.closeListen = closeListen
+	for _, conn := range w.conns {
+		conn.closeListen = closeListen
+	}
+}
 func (w *WsClient) SetLog(log ILogger) {
 	w.log = log
 }
 func (w *WsClient) Close() {
-	w.connLock.Lock()
-	defer w.connLock.Unlock()
+
+	for k, conn := range w.conns {
+		conn.Close()
+		delete(w.conns, k)
+	}
+	w.closeListen()
+}
+func (w *WsClientConn) Close() {
 	if w.isClose {
 		return
 	}
+	w.conn.Close()
 
-	for k, conn := range w.conns {
-		_ = conn.Close()
-
-		delete(w.conns, k)
-	}
 	for k, _ := range w.callbackMap {
 		delete(w.callbackMap, k)
 	}
 	w.isClose = true
-	w.CloseListen()
+	w.closeListen()
 }
-func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
-	w.connLock.Lock()
-	defer w.connLock.Unlock()
-	conn, ok := w.conns[typ]
-	if !ok {
-		c, rp, err := w.connect(w.ctx, w.urls[typ])
+func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
+	if w.conn == nil || w.isClose {
+		c, rp, err := w.connect(w.ctx, w.url)
 		if err != nil {
 			return nil, err
 		}
@@ -170,14 +209,13 @@ func (w *WsClient) lazyConnect(typ SvcType) (*websocket.Conn, error) {
 			w.Close()
 			return nil
 		})
-		conn = c
-		w.conns[typ] = conn
+		w.conn = c
 
-		go w.process(typ, conn)
+		go w.process()
 	}
-	return conn, nil
+	return w.conn, nil
 }
-func (w *WsClient) push(typ SvcType, arg Arg, resp *WsOriginResp) {
+func (w *WsClientConn) push(typ SvcType, arg Arg, resp *WsOriginResp) {
 	if callback, ok := w.GetCallback(arg.Key()); ok {
 		callback(resp)
 	} else {
@@ -185,13 +223,13 @@ func (w *WsClient) push(typ SvcType, arg Arg, resp *WsOriginResp) {
 	}
 }
 
-func (w *WsClient) RegCallback(channel string, c func(*WsOriginResp)) {
+func (w *WsClientConn) RegCallback(channel string, c func(*WsOriginResp)) {
 	w.chanLock.Lock()
 	defer w.chanLock.Unlock()
 
 	w.callbackMap[channel] = c
 }
-func (w *WsClient) GetCallback(channel string) (func(*WsOriginResp), bool) {
+func (w *WsClientConn) GetCallback(channel string) (func(*WsOriginResp), bool) {
 	w.chanLock.RLock()
 	defer w.chanLock.RUnlock()
 
@@ -201,7 +239,7 @@ func (w *WsClient) GetCallback(channel string) (func(*WsOriginResp), bool) {
 	return nil, false
 }
 
-func (w *WsClient) UnRegCh(channel string) {
+func (w *WsClientConn) UnRegCh(channel string) {
 	w.chanLock.Lock()
 	defer w.chanLock.Unlock()
 
@@ -209,10 +247,19 @@ func (w *WsClient) UnRegCh(channel string) {
 		delete(w.callbackMap, channel)
 	}
 }
-func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
+func (w *WsClientConn) process() {
 	defer func() {
 		if err := recover(); err != nil {
 			w.log.Errorf(fmt.Sprintf("%v", err))
+			w.Close()
+			for {
+				time.Sleep(time.Second * 3)
+				_, err := w.lazyConnect()
+				if err == nil {
+					break
+				}
+				w.log.Errorf(err.Error())
+			}
 		}
 	}()
 	for {
@@ -221,7 +268,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			return
 		default:
 		}
-		mtp, bs, err := conn.ReadMessage()
+		mtp, bs, err := w.conn.ReadMessage()
 		if err != nil {
 			w.log.Errorf(err.Error())
 			w.Close()
@@ -236,7 +283,7 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			w.log.Errorf(fmt.Sprintf("msg:%v, data:%s", err.Error(), string(bs)))
 			continue
 		}
-		w.ReadMonitor(v.Arg)
+		w.readMonitor(v.Arg)
 		if v.Event == "unsubscribe" {
 			if w.UnSubscribeCallback != nil {
 				w.UnSubscribeCallback()
@@ -246,23 +293,23 @@ func (w *WsClient) process(typ SvcType, conn *websocket.Conn) {
 			if w.SubscribeCallback != nil {
 				w.SubscribeCallback()
 			}
-			w.log.Infof(fmt.Sprintf("%s:%+v subscribe success", typ, v.Arg))
+			w.log.Infof(fmt.Sprintf("%s:%+v subscribe success", w.typ, v.Arg))
 		} else if v.Event == "login" {
-			w.log.Infof(fmt.Sprintf("%s:login success", typ))
-			w.isLogin[typ] = true
+			w.log.Infof(fmt.Sprintf("%s:login success", w.typ))
+			w.isLogin = true
 			v.Arg.Channel = "login"
 		} else if v.Event == "error" {
 			if v.Code == "60009" {
 				v.Arg.Channel = "login"
 			}
-			w.log.Errorf(fmt.Sprintf("%s:read ws err: %v", typ, v))
+			w.log.Errorf(fmt.Sprintf("%s:read ws err: %v", w.typ, v))
 		}
-		w.push(typ, v.Arg, v)
+		w.push(w.typ, v.Arg, v)
 	}
 }
 
 func (w *WsClient) Send(typ SvcType, req any) error {
-	conn, err := w.lazyConnect(typ)
+	conn, err := w.conns[typ].lazyConnect()
 	if err != nil {
 		return err
 	}
@@ -273,7 +320,7 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	w.log.Infof(fmt.Sprintf("%s:send %s", typ, string(bs)))
 	w.connLock.Lock()
 	defer w.connLock.Unlock()
-	if w.isClose {
+	if w.conns[typ].isClose {
 		return errors.New("conn is close")
 	}
 	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
@@ -309,7 +356,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 		}
 	}
 	ctx, cancel := context.WithCancel(w.ctx)
-	w.RegCallback(arg.Key(), func(resp *WsOriginResp) {
+	w.conns[typ].RegCallback(arg.Key(), func(resp *WsOriginResp) {
 		if resp.Event == "subscribe" {
 			cancel()
 			return
