@@ -54,6 +54,7 @@ func (w DefaultLogger) Panicf(template string, args ...interface{}) {
 }
 
 type WsClientConn struct {
+	parentCtx           context.Context
 	ctx                 context.Context
 	cancel              func()
 	typ                 SvcType
@@ -67,19 +68,19 @@ type WsClientConn struct {
 	proxy               func(*http.Request) (*url.URL, error)
 	isClose             bool
 	chanLock            sync.RWMutex
+	subscribeLock       sync.RWMutex
+	loginLock           sync.RWMutex
 	readMonitor         func(arg Arg)
 	closeListen         func()
+	subArgs             map[string]*Arg
+	keyConfig           KeyConfig
 }
 type WsClient struct {
-	conns               map[SvcType]*WsClientConn
+	Conns               map[SvcType]*WsClientConn
 	ctx                 context.Context
 	cancel              func()
 	SubscribeCallback   func()
 	UnSubscribeCallback func()
-	connLock            sync.RWMutex
-	loginLock           sync.RWMutex
-	chanLock            sync.RWMutex
-	subscribeLock       sync.RWMutex
 	keyConfig           KeyConfig
 	log                 ILogger
 	closeListen         func()
@@ -103,9 +104,11 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 	}
 	conns := map[SvcType]*WsClientConn{}
 	for svcType, baseURL := range urls[env] {
+		ctxChild, cancelChild := context.WithCancel(ctx)
 		conns[svcType] = &WsClientConn{
-			ctx:                 ctx,
-			cancel:              cancel,
+			parentCtx:           ctx,
+			ctx:                 ctxChild,
+			cancel:              cancelChild,
 			typ:                 svcType,
 			url:                 baseURL,
 			SubscribeCallback:   func() {},
@@ -115,13 +118,15 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 			proxy:               proxyURL,
 			readMonitor:         func(Arg) {},
 			closeListen:         func() {},
+			keyConfig:           keyConfig,
+			subArgs:             map[string]*Arg{},
 		}
 	}
 	return &WsClient{
 		ctx:         ctx,
 		cancel:      cancel,
 		keyConfig:   keyConfig,
-		conns:       conns,
+		Conns:       conns,
 		log:         DefaultLogger{},
 		closeListen: func() {},
 		readMonitor: func(arg Arg) {},
@@ -135,11 +140,11 @@ func (w *WsClientConn) connect(ctx context.Context, url BaseURL) (*websocket.Con
 	if err != nil {
 		return nil, nil, err
 	}
-	go w.heartbeat(conn)
+	go w.heartbeat()
 	return conn, rp, err
 }
 
-func (w *WsClientConn) heartbeat(conn *websocket.Conn) {
+func (w *WsClientConn) heartbeat() {
 	timer := time.NewTicker(time.Second * 20)
 	defer timer.Stop()
 	for {
@@ -147,8 +152,8 @@ func (w *WsClientConn) heartbeat(conn *websocket.Conn) {
 		case <-w.ctx.Done():
 			return
 		case <-timer.C:
-			conn.SetWriteDeadline(time.Now().Add(time.Second))
-			err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
+			w.conn.SetWriteDeadline(time.Now().Add(time.Second))
+			err := w.conn.WriteMessage(websocket.TextMessage, []byte("ping"))
 			if err != nil {
 				w.log.Errorf(err.Error())
 				w.Close()
@@ -160,27 +165,27 @@ func (w *WsClientConn) heartbeat(conn *websocket.Conn) {
 
 func (w *WsClient) SetReadMonitor(readMonitor func(arg Arg)) {
 	w.readMonitor = readMonitor
-	for _, conn := range w.conns {
+	for _, conn := range w.Conns {
 		conn.readMonitor = readMonitor
 	}
 }
 func (w *WsClient) SetCloseListen(closeListen func()) {
 	w.closeListen = closeListen
-	for _, conn := range w.conns {
+	for _, conn := range w.Conns {
 		conn.closeListen = closeListen
 	}
 }
 func (w *WsClient) SetLog(log ILogger) {
 	w.log = log
-	for _, conn := range w.conns {
+	for _, conn := range w.Conns {
 		conn.log = log
 	}
 }
 func (w *WsClient) Close() {
 
-	for k, conn := range w.conns {
+	for k, conn := range w.Conns {
 		conn.Close()
-		delete(w.conns, k)
+		delete(w.Conns, k)
 	}
 	w.closeListen()
 }
@@ -190,11 +195,9 @@ func (w *WsClientConn) Close() {
 	}
 	w.conn.Close()
 
-	for k, _ := range w.callbackMap {
-		delete(w.callbackMap, k)
-	}
 	w.isClose = true
 	w.closeListen()
+	w.cancel()
 }
 func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
 	if w.conn == nil || w.isClose {
@@ -243,25 +246,32 @@ func (w *WsClientConn) GetCallback(channel string) (func(*WsOriginResp), bool) {
 func (w *WsClientConn) UnRegCh(channel string) {
 	w.chanLock.Lock()
 	defer w.chanLock.Unlock()
-
 	if _, ok := w.callbackMap[channel]; ok {
 		delete(w.callbackMap, channel)
 	}
 }
+func (w *WsClientConn) reconnect() {
+re:
+	w.Close()
+	w.ctx, w.cancel = context.WithCancel(w.parentCtx)
+	w.conn = nil
+	w.isClose = false
+	w.isLogin = false
+	for key, args := range w.subArgs {
+		if err := subscribe(w, args, w.callbackMap[key], true); err != nil {
+			w.log.Errorf(err.Error())
+			goto re
+		}
+	}
+}
+
 func (w *WsClientConn) process() {
 	defer func() {
 		if err := recover(); err != nil {
 			w.log.Errorf(fmt.Sprintf("%v", err))
 			w.Close()
-			for {
-				time.Sleep(time.Second * 3)
-				_, err := w.lazyConnect()
-				if err == nil {
-					break
-				}
-				w.log.Errorf(err.Error())
-			}
 		}
+		w.reconnect()
 	}()
 	for {
 		select {
@@ -310,7 +320,7 @@ func (w *WsClientConn) process() {
 }
 
 func (w *WsClient) Send(typ SvcType, req any) error {
-	conn, err := w.conns[typ].lazyConnect()
+	conn, err := w.Conns[typ].lazyConnect()
 	if err != nil {
 		return err
 	}
@@ -319,49 +329,57 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 		return err
 	}
 	w.log.Infof(fmt.Sprintf("%s:send %s", typ, string(bs)))
-	w.connLock.Lock()
-	defer w.connLock.Unlock()
-	if w.conns[typ].isClose {
+	if w.Conns[typ].isClose {
+		return errors.New("conn is close")
+	}
+	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
+	return conn.WriteMessage(websocket.TextMessage, bs)
+}
+func (w *WsClientConn) Send(req any) error {
+	conn, err := w.lazyConnect()
+	if err != nil {
+		return err
+	}
+	bs, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	w.log.Infof(fmt.Sprintf("%s:send %s", w.typ, string(bs)))
+	if w.isClose {
 		return errors.New("conn is close")
 	}
 	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
 	return conn.WriteMessage(websocket.TextMessage, bs)
 }
 
-func (w *WsClient) login(typ SvcType) error {
+func (w *WsClientConn) login() error {
 	w.loginLock.Lock()
 	defer w.loginLock.Unlock()
 
-	if w.conns[typ].isLogin {
+	if w.isLogin {
 		return nil
 	}
 	c := make(chan *WsOriginResp, 1)
-	if err := w.Login(typ, func(resp *WsOriginResp) {
+	w.RegCallback(Arg{
+		Channel: "login",
+	}.Key(), func(resp *WsOriginResp) {
 		c <- resp
-	}); err != nil {
+	})
+	err := w.Send(Op{
+		Op:   "login",
+		Args: []map[string]string{w.keyConfig.makeWsSign()},
+	})
+	if err != nil {
 		return err
 	}
 	resp := <-c
-	if resp.Event == "error" || !w.conns[typ].isLogin {
+	if resp.Event == "error" || !w.isLogin {
 		return errors.New(resp.Msg)
 	}
 	return nil
 }
 func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *WsResp[T]), needLogin bool) error {
-	w.subscribeLock.Lock()
-	defer w.subscribeLock.Unlock()
-
-	if needLogin && !w.conns[typ].isLogin {
-		if err := w.login(typ); err != nil {
-			return err
-		}
-	}
-	ctx, cancel := context.WithCancel(w.ctx)
-	w.conns[typ].RegCallback(arg.Key(), func(resp *WsOriginResp) {
-		if resp.Event == "subscribe" {
-			cancel()
-			return
-		}
+	return subscribe(w.Conns[typ], arg, func(resp *WsOriginResp) {
 		var t []T
 		err := json.Unmarshal(resp.Data, &t)
 		if err != nil {
@@ -375,14 +393,33 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 			Arg:    resp.Arg,
 			Data:   t,
 		})
+	}, needLogin)
+}
+func subscribe(w *WsClientConn, arg *Arg, callback func(resp *WsOriginResp), needLogin bool) error {
+	w.subscribeLock.Lock()
+	defer w.subscribeLock.Unlock()
+
+	if needLogin && !w.isLogin {
+		if err := w.login(); err != nil {
+			return err
+		}
+	}
+	ctx, cancel := context.WithCancel(w.ctx)
+	w.RegCallback(arg.Key(), func(resp *WsOriginResp) {
+		if resp.Event == "subscribe" {
+			cancel()
+			return
+		}
+		callback(resp)
 	})
+	w.subArgs[arg.Key()] = arg
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second):
-				if err := w.Send(typ, Op{
+				if err := w.Send(Op{
 					Op:   "subscribe",
 					Args: []*Arg{arg},
 				}); err != nil {
@@ -396,7 +433,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 }
 
 func (w *WsClient) UnSubscribe(arg *Arg, typ SvcType) error {
-	if typ == Private && !w.conns[typ].isLogin {
+	if typ == Private && !w.Conns[typ].isLogin {
 		return nil
 	}
 	return w.Send(typ, Op{

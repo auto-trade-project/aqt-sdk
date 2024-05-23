@@ -27,7 +27,7 @@ func (w *WsClient) UOrderBook(channel, instId string) error {
 }
 
 func (w *WsClient) Login(typ SvcType, callback func(resp *WsOriginResp)) error {
-	w.conns[typ].RegCallback(Arg{
+	w.Conns[typ].RegCallback(Arg{
 		Channel: "login",
 	}.Key(), callback)
 	return w.Send(typ, Op{
