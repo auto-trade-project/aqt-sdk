@@ -56,7 +56,7 @@ func (w DefaultLogger) Panicf(template string, args ...interface{}) {
 type WsClientConn struct {
 	parentCtx           context.Context
 	ctx                 context.Context
-	cancel              func()
+	cancel              context.CancelCauseFunc
 	typ                 SvcType
 	url                 BaseURL
 	conn                *websocket.Conn
@@ -104,7 +104,7 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 	}
 	conns := map[SvcType]*WsClientConn{}
 	for svcType, baseURL := range urls[env] {
-		ctxChild, cancelChild := context.WithCancel(ctx)
+		ctxChild, cancelChild := context.WithCancelCause(ctx)
 		conns[svcType] = &WsClientConn{
 			parentCtx:           ctx,
 			ctx:                 ctxChild,
@@ -134,6 +134,8 @@ func NewWsClientWithCustom(ctx context.Context, keyConfig KeyConfig, env Destina
 	}
 }
 func (w *WsClientConn) connect(ctx context.Context, url BaseURL) (*websocket.Conn, *http.Response, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
 	dialer := websocket.DefaultDialer
 	dialer.Proxy = w.proxy
 	conn, rp, err := dialer.DialContext(ctx, string(url), nil)
@@ -156,7 +158,7 @@ func (w *WsClientConn) heartbeat() {
 			err := w.conn.WriteMessage(websocket.TextMessage, []byte("ping"))
 			if err != nil {
 				w.log.Errorf(err.Error())
-				w.Close()
+				w.Close(err)
 				return
 			}
 		}
@@ -184,23 +186,26 @@ func (w *WsClient) SetLog(log ILogger) {
 func (w *WsClient) Close() {
 
 	for k, conn := range w.Conns {
-		conn.Close()
+		conn.Close(nil)
 		delete(w.Conns, k)
 	}
 	w.closeListen()
 }
-func (w *WsClientConn) Close() {
+func (w *WsClientConn) Close(err error) {
 	if w.isClose {
 		return
 	}
-	w.conn.Close()
+	if w.conn != nil {
+		w.conn.Close()
+	}
 
 	w.isClose = true
 	w.closeListen()
-	w.cancel()
+	w.cancel(err)
 }
 func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
 	if w.conn == nil || w.isClose {
+		w.ctx, w.cancel = context.WithCancelCause(context.Background())
 		c, rp, err := w.connect(w.ctx, w.url)
 		if err != nil {
 			return nil, err
@@ -210,9 +215,10 @@ func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
 		}
 		// 监听连接关闭,进行资源回收
 		c.SetCloseHandler(func(code int, text string) error {
-			w.Close()
+			w.Close(errors.New("ws conn is close"))
 			return nil
 		})
+		w.isClose, w.isLogin = false, false
 		w.conn = c
 
 		go w.process()
@@ -250,28 +256,13 @@ func (w *WsClientConn) UnRegCh(channel string) {
 		delete(w.callbackMap, channel)
 	}
 }
-func (w *WsClientConn) reconnect() {
-re:
-	w.Close()
-	w.ctx, w.cancel = context.WithCancel(w.parentCtx)
-	w.conn = nil
-	w.isClose = false
-	w.isLogin = false
-	for key, args := range w.subArgs {
-		if err := subscribe(w, args, w.callbackMap[key], true); err != nil {
-			w.log.Errorf(err.Error())
-			goto re
-		}
-	}
-}
 
 func (w *WsClientConn) process() {
 	defer func() {
 		if err := recover(); err != nil {
 			w.log.Errorf(fmt.Sprintf("%v", err))
-			w.Close()
+			w.Close(fmt.Errorf("%v", err))
 		}
-		w.reconnect()
 	}()
 	for {
 		select {
@@ -282,7 +273,7 @@ func (w *WsClientConn) process() {
 		mtp, bs, err := w.conn.ReadMessage()
 		if err != nil {
 			w.log.Errorf(err.Error())
-			w.Close()
+			w.Close(err)
 			return
 		}
 		if mtp != websocket.TextMessage || string(bs) == "pong" {
@@ -398,12 +389,7 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 func subscribe(w *WsClientConn, arg *Arg, callback func(resp *WsOriginResp), needLogin bool) error {
 	w.subscribeLock.Lock()
 	defer w.subscribeLock.Unlock()
-
-	if needLogin && !w.isLogin {
-		if err := w.login(); err != nil {
-			return err
-		}
-	}
+	w.lazyConnect()
 	ctx, cancel := context.WithCancel(w.ctx)
 	w.RegCallback(arg.Key(), func(resp *WsOriginResp) {
 		if resp.Event == "subscribe" {
@@ -413,22 +399,38 @@ func subscribe(w *WsClientConn, arg *Arg, callback func(resp *WsOriginResp), nee
 		callback(resp)
 	})
 	w.subArgs[arg.Key()] = arg
+	var err error
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second):
-				if err := w.Send(Op{
+				if needLogin && !w.isLogin {
+					if err = w.login(); err != nil {
+						cancel()
+						return
+					}
+				}
+				if err = w.Send(Op{
 					Op:   "subscribe",
 					Args: []*Arg{arg},
 				}); err != nil {
+					cancel()
 					return
 				}
 			}
 		}
 	}()
 	<-ctx.Done()
+	if err != nil {
+		return err
+	}
+	<-w.ctx.Done()
+	err = context.Cause(w.ctx)
+	if !errors.Is(err, context.Canceled) {
+		return err
+	}
 	return nil
 }
 
