@@ -313,22 +313,7 @@ func (w *WsClientConn) process() {
 }
 
 func (w *WsClient) Send(typ SvcType, req any) error {
-	conn, err := w.Conns[typ].lazyConnect()
-	if err != nil {
-		return err
-	}
-	bs, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	w.log.Infof(fmt.Sprintf("%s:send %s", typ, string(bs)))
-	if w.Conns[typ].isClose {
-		return errors.New("conn is close")
-	}
-	w.Conns[typ].sendLock.Lock()
-	defer w.Conns[typ].sendLock.Unlock()
-	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
-	return conn.WriteMessage(websocket.TextMessage, bs)
+	return w.Conns[typ].Send(req)
 }
 func (w *WsClientConn) Send(req any) error {
 	conn, err := w.lazyConnect()
@@ -343,6 +328,8 @@ func (w *WsClientConn) Send(req any) error {
 	if w.isClose {
 		return errors.New("conn is close")
 	}
+	w.sendLock.Lock()
+	defer w.sendLock.Unlock()
 	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
 	return conn.WriteMessage(websocket.TextMessage, bs)
 }
