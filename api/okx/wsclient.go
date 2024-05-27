@@ -154,8 +154,10 @@ func (w *WsClientConn) heartbeat() {
 		case <-w.ctx.Done():
 			return
 		case <-timer.C:
+			w.sendLock.Lock()
 			w.conn.SetWriteDeadline(time.Now().Add(time.Second))
 			err := w.conn.WriteMessage(websocket.TextMessage, []byte("ping"))
+			w.sendLock.Unlock()
 			if err != nil {
 				w.log.Errorf(err.Error())
 				w.Close(err)
