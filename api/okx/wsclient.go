@@ -68,7 +68,7 @@ type WsClientConn struct {
 	proxy               func(*http.Request) (*url.URL, error)
 	isClose             bool
 	chanLock            sync.RWMutex
-	subscribeLock       sync.RWMutex
+	sendLock            sync.RWMutex
 	loginLock           sync.RWMutex
 	readMonitor         func(arg Arg)
 	closeListen         func()
@@ -323,6 +323,8 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	if w.Conns[typ].isClose {
 		return errors.New("conn is close")
 	}
+	w.Conns[typ].sendLock.Lock()
+	defer w.Conns[typ].sendLock.Unlock()
 	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
 	return conn.WriteMessage(websocket.TextMessage, bs)
 }
@@ -387,8 +389,6 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 	}, needLogin)
 }
 func subscribe(w *WsClientConn, arg *Arg, callback func(resp *WsOriginResp), needLogin bool) error {
-	w.subscribeLock.Lock()
-	defer w.subscribeLock.Unlock()
 	w.lazyConnect()
 	ctx, cancel := context.WithCancel(w.ctx)
 	w.RegCallback(arg.Key(), func(resp *WsOriginResp) {
