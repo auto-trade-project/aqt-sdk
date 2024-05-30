@@ -138,12 +138,7 @@ func (w *WsClientConn) connect(ctx context.Context, url BaseURL) (*websocket.Con
 	defer cancel()
 	dialer := websocket.DefaultDialer
 	dialer.Proxy = w.proxy
-	conn, rp, err := dialer.DialContext(ctx, string(url), nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	go w.heartbeat()
-	return conn, rp, err
+	return dialer.DialContext(ctx, string(url), nil)
 }
 
 func (w *WsClientConn) heartbeat() {
@@ -207,8 +202,8 @@ func (w *WsClientConn) Close(err error) {
 }
 func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
 	if w.conn == nil || w.isClose {
-		w.ctx, w.cancel = context.WithCancelCause(context.Background())
-		c, rp, err := w.connect(w.ctx, w.url)
+		ctx, cancel := context.WithCancelCause(context.Background())
+		c, rp, err := w.connect(ctx, w.url)
 		if err != nil {
 			return nil, err
 		}
@@ -216,13 +211,31 @@ func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
 			return nil, fmt.Errorf("connect response err: %v", rp)
 		}
 		// 监听连接关闭,进行资源回收
+		w.isClose, w.isLogin = false, false
+		w.conn = c
+		*w = WsClientConn{
+			parentCtx:           w.parentCtx,
+			ctx:                 ctx,
+			cancel:              cancel,
+			typ:                 w.typ,
+			url:                 w.url,
+			conn:                c,
+			SubscribeCallback:   w.SubscribeCallback,
+			UnSubscribeCallback: w.UnSubscribeCallback,
+			callbackMap:         w.callbackMap,
+			isLogin:             w.isLogin,
+			log:                 w.log,
+			proxy:               w.proxy,
+			readMonitor:         w.readMonitor,
+			closeListen:         w.closeListen,
+			subArgs:             w.subArgs,
+			keyConfig:           w.keyConfig,
+		}
 		c.SetCloseHandler(func(code int, text string) error {
 			w.Close(errors.New("ws conn is close"))
 			return nil
 		})
-		w.isClose, w.isLogin = false, false
-		w.conn = c
-
+		go w.heartbeat()
 		go w.process()
 	}
 	return w.conn, nil
