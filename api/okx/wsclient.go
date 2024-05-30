@@ -200,7 +200,7 @@ func (w *WsClientConn) Close(err error) {
 	w.closeListen()
 	w.cancel(err)
 }
-func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
+func (w *WsClientConn) lazyConnect() (*WsClientConn, error) {
 	if w.conn == nil || w.isClose {
 		ctx, cancel := context.WithCancelCause(context.Background())
 		c, rp, err := w.connect(ctx, w.url)
@@ -213,7 +213,7 @@ func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
 		// 监听连接关闭,进行资源回收
 		w.isClose, w.isLogin = false, false
 		w.conn = c
-		*w = WsClientConn{
+		newW := &WsClientConn{
 			parentCtx:           w.parentCtx,
 			ctx:                 ctx,
 			cancel:              cancel,
@@ -232,13 +232,14 @@ func (w *WsClientConn) lazyConnect() (*websocket.Conn, error) {
 			keyConfig:           w.keyConfig,
 		}
 		c.SetCloseHandler(func(code int, text string) error {
-			w.Close(errors.New("ws conn is close"))
+			newW.Close(errors.New("ws conn is close"))
 			return nil
 		})
-		go w.heartbeat()
-		go w.process()
+		go newW.heartbeat()
+		go newW.process()
+		return newW, nil
 	}
-	return w.conn, nil
+	return w, nil
 }
 func (w *WsClientConn) push(typ SvcType, arg Arg, resp *WsOriginResp) {
 	if callback, ok := w.GetCallback(arg.Key()); ok {
@@ -329,7 +330,7 @@ func (w *WsClient) Send(typ SvcType, req any) error {
 	return w.Conns[typ].Send(req)
 }
 func (w *WsClientConn) Send(req any) error {
-	conn, err := w.lazyConnect()
+	newW, err := w.lazyConnect()
 	if err != nil {
 		return err
 	}
@@ -343,8 +344,8 @@ func (w *WsClientConn) Send(req any) error {
 	}
 	w.sendLock.Lock()
 	defer w.sendLock.Unlock()
-	conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
-	return conn.WriteMessage(websocket.TextMessage, bs)
+	newW.conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
+	return newW.conn.WriteMessage(websocket.TextMessage, bs)
 }
 
 func (w *WsClientConn) login() error {
@@ -374,7 +375,7 @@ func (w *WsClientConn) login() error {
 	return nil
 }
 func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *WsResp[T]), needLogin bool) error {
-	return subscribe(w.Conns[typ], arg, func(resp *WsOriginResp) {
+	return subscribe(w.Conns, typ, arg, func(resp *WsOriginResp) {
 		var t []T
 		err := json.Unmarshal(resp.Data, &t)
 		if err != nil {
@@ -390,8 +391,13 @@ func Subscribe[T any](w *WsClient, arg *Arg, typ SvcType, callback func(resp *Ws
 		})
 	}, needLogin)
 }
-func subscribe(w *WsClientConn, arg *Arg, callback func(resp *WsOriginResp), needLogin bool) error {
-	w.lazyConnect()
+func subscribe(ws map[SvcType]*WsClientConn, typ SvcType, arg *Arg, callback func(resp *WsOriginResp), needLogin bool) error {
+	w := ws[typ]
+	connect, err := w.lazyConnect()
+	if err != nil {
+		return err
+	}
+	ws[typ] = connect
 	ctx, cancel := context.WithCancel(w.ctx)
 	w.RegCallback(arg.Key(), func(resp *WsOriginResp) {
 		if resp.Event == "subscribe" {
@@ -401,7 +407,6 @@ func subscribe(w *WsClientConn, arg *Arg, callback func(resp *WsOriginResp), nee
 		callback(resp)
 	})
 	w.subArgs[arg.Key()] = arg
-	var err error
 	go func() {
 		for {
 			select {
