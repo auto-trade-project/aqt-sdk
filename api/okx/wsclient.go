@@ -327,13 +327,14 @@ func (w *WsClientConn) process() {
 }
 
 func (w *WsClient) Send(typ SvcType, req any) error {
-	return w.Conns[typ].Send(req)
-}
-func (w *WsClientConn) Send(req any) error {
-	newW, err := w.lazyConnect()
+	newW, err := w.Conns[typ].lazyConnect()
 	if err != nil {
 		return err
 	}
+	w.Conns[typ] = newW
+	return newW.Send(req)
+}
+func (w *WsClientConn) Send(req any) error {
 	bs, err := json.Marshal(req)
 	if err != nil {
 		return err
@@ -344,8 +345,8 @@ func (w *WsClientConn) Send(req any) error {
 	}
 	w.sendLock.Lock()
 	defer w.sendLock.Unlock()
-	newW.conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
-	return newW.conn.WriteMessage(websocket.TextMessage, bs)
+	w.conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
+	return w.conn.WriteMessage(websocket.TextMessage, bs)
 }
 
 func (w *WsClientConn) login() error {
