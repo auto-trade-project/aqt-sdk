@@ -199,6 +199,13 @@ func (w *WsClient) CheckConn() error {
 		if err != nil {
 			return err
 		}
+		conn.SetKeepAlive(
+			func(conn *ws.Conn) error {
+				return conn.Write([]byte("ping"))
+			},
+			func(data []byte) bool {
+				return string(data) == "pong"
+			})
 		w.conn = conn
 		w.isLogin = false
 	}

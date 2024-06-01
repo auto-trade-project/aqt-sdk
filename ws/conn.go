@@ -30,27 +30,31 @@ const (
 
 // Conn ws连接
 type Conn struct {
-	ctx          context.Context
-	cancel       context.CancelCauseFunc
-	Status       Status
-	conn         *websocket.Conn
-	dataCh       map[string]chan Data
-	lock         sync.RWMutex
-	proxy        func(req *http.Request) (*url.URL, error)
-	writeTimeout time.Duration // 写入超时时间
-	mt           MsgType       // 连接使用的消息类型
+	ctx               context.Context
+	cancel            context.CancelCauseFunc
+	Status            Status
+	conn              *websocket.Conn
+	dataCh            map[string]chan Data
+	lock              sync.RWMutex
+	proxy             func(req *http.Request) (*url.URL, error)
+	writeTimeout      time.Duration // 写入超时时间
+	mt                MsgType       // 连接使用的消息类型
+	keepaliveFn       func(*Conn) error
+	keepaliveListenFn func([]byte) bool
 }
 
 // DialContext 拨号 使用context控制
 func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	c := &Conn{
-		ctx:          ctx,
-		cancel:       cancel,
-		Status:       Alive,
-		dataCh:       map[string]chan Data{},
-		writeTimeout: time.Second * 3,
-		mt:           TextMessage,
+		ctx:               ctx,
+		cancel:            cancel,
+		Status:            Alive,
+		dataCh:            map[string]chan Data{},
+		writeTimeout:      time.Second * 3,
+		mt:                TextMessage,
+		keepaliveFn:       func(conn *Conn) error { return nil },
+		keepaliveListenFn: func(bytes []byte) bool { return true },
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -75,24 +79,36 @@ func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, er
 func (c *Conn) Context() context.Context {
 	return c.ctx
 }
+func (c *Conn) SetKeepAlive(keepaliveFn func(conn *Conn) error, keepaliveListenFn func(data []byte) bool) {
+	c.keepaliveFn = keepaliveFn
+	c.keepaliveListenFn = keepaliveListenFn
+}
 
 // keepalive
 func (c *Conn) keepalive() {
+	c.conn.SetPongHandler(func(appData string) error {
+		c.Status = Alive
+		return nil
+	})
 	for {
 		if c.Status == Dead {
 			return
 		}
-		err := c.Write([]byte("ping"))
+		err := c.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(time.Second*3))
 		if err != nil {
 			c.Status = Dead
 			c.cancel(err)
 			_ = c.conn.Close()
 			return
 		}
-		c.conn.SetPongHandler(func(appData string) error {
-			c.Status = Alive
-			return nil
-		})
+		err = c.keepaliveFn(c)
+		if err != nil {
+			c.Status = Dead
+			c.cancel(err)
+			_ = c.conn.Close()
+			return
+		}
+		time.Sleep(time.Second * 20)
 	}
 }
 
@@ -157,6 +173,9 @@ func (c *Conn) read() {
 			c.cancel(err)
 			_ = c.conn.Close()
 			return
+		}
+		if c.keepaliveListenFn(data) {
+			c.Status = Alive
 		}
 		// 写入已注册的监听中
 		c.lock.RLock()
