@@ -200,6 +200,7 @@ func (w *WsClient) CheckConn() error {
 			return err
 		}
 		w.conn = conn
+		w.isLogin = false
 	}
 	return nil
 }

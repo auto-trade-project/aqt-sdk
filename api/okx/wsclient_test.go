@@ -24,8 +24,8 @@ func TestNewWsClient(t *testing.T) {
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.SpotOrders(context.Background(), func(resp *WsResp[*Order]) {
-			t.Log(resp.Data[0].ClOrdId)
+		if err := client.Account(context.Background(), func(resp *WsResp[*Balance]) {
+			t.Log(resp.Data[0].Details)
 			cond.L.Lock()
 			count--
 			cond.Broadcast()

@@ -82,7 +82,7 @@ func (c *Conn) keepalive() {
 		if c.Status == Dead {
 			return
 		}
-		err := c.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(c.writeTimeout))
+		err := c.Write([]byte("ping"))
 		if err != nil {
 			c.Status = Dead
 			c.cancel(err)
@@ -131,7 +131,11 @@ func (c *Conn) Write(data []byte) error {
 	err := c.conn.WriteMessage(int(c.mt), data)
 	if err != nil {
 		c.Status = Dead
-		c.cancel(err)
+		if context.Cause(c.ctx) != nil {
+			err = context.Cause(c.ctx)
+		} else {
+			c.cancel(err)
+		}
 		_ = c.conn.Close()
 		return err
 	}
