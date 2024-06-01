@@ -93,7 +93,13 @@ func (w *PrivateClient) UOrders(instType string) error {
 
 // SpotOrders 撮合交易订单频道
 func (w *PrivateClient) SpotOrders(ctx context.Context, callback func(resp *WsResp[*Order])) error {
-	return Subscribe(&w.WsClient, ctx, makeArg("orders", "SPOT"), callback)
+	if err := w.login(ctx); err != nil {
+		return err
+	}
+	return Subscribe(&w.WsClient, ctx, &Arg{
+		Channel:  "orders",
+		InstType: "SPOT",
+	}, callback)
 }
 
 // USpotOrders 取消订阅撮合交易订单频道

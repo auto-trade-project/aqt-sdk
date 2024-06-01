@@ -24,7 +24,7 @@ func TestNewWsClient(t *testing.T) {
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.Orders(context.Background(), "BTC-USDT", func(resp *WsResp[*Order]) {
+		if err := client.SpotOrders(context.Background(), func(resp *WsResp[*Order]) {
 			t.Log(resp.Data[0].ClOrdId)
 			cond.L.Lock()
 			count--

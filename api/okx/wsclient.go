@@ -96,11 +96,12 @@ func (w *WsClient) login(ctx context.Context) error {
 	// 并发控制
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
+	// 登录并监听
 	err := w.watch(ctx, "login", Op{
 		Op:   "login",
 		Args: []map[string]string{w.keyConfig.makeWsSign()},
 	}, func(rp *WsOriginResp) {
-		if rp.Code == "60009" {
+		if rp.Code != "0" {
 			w.log.Errorf(fmt.Sprintf("%s:read ws err: %v", w.typ, rp))
 			cancel(errors.New(rp.Msg))
 		} else {
@@ -110,7 +111,9 @@ func (w *WsClient) login(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// 等待登录完成
 	<-ctx.Done()
+	// 处理登录错误
 	err = context.Cause(ctx)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err
@@ -168,9 +171,7 @@ func (w *WsClient) watch(ctx context.Context, key string, op Op, callback func(r
 				continue
 			}
 			if rp.Event == "error" {
-				if rp.Code == "60009" {
-					rp.Event = "login"
-				}
+				w.log.Errorf(fmt.Sprintf("error msg:%v, data:%s", rp.Msg, string(data.Data)))
 			}
 			if key == rp.Arg.Key() || rp.Event == key {
 				callback(rp)

@@ -47,7 +47,7 @@ func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, er
 	c := &Conn{
 		ctx:          ctx,
 		cancel:       cancel,
-		Status:       Dead,
+		Status:       Alive,
 		dataCh:       map[string]chan Data{},
 		writeTimeout: time.Second * 3,
 		mt:           TextMessage,
@@ -125,6 +125,8 @@ func (c *Conn) UnregisterWatch(id string) {
 
 // Write 写入数据
 func (c *Conn) Write(data []byte) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	_ = c.conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
 	err := c.conn.WriteMessage(int(c.mt), data)
 	if err != nil {
