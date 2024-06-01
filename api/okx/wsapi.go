@@ -1,94 +1,114 @@
 package okx
 
-func (w *WsClient) MarkPriceCandlesticks(channel, instId string, callback func(resp *WsResp[*MarkPriceCandle])) error {
-	return Subscribe(w, makeArg("mark-price-candle"+channel, instId), Business, callback, false)
-}
-func (w *WsClient) UMarkPriceCandlesticks(channel, instId string) error {
-	return w.UnSubscribe(makeArg("mark-price-candle"+channel, instId), Business)
-}
-func (w *WsClient) Candle(channel, instId string, callback func(resp *WsResp[Candle])) error {
-	return Subscribe(w, makeArg("candle"+channel, instId), Business, callback, false)
-}
-func (w *WsClient) UCandle(channel, instId string) error {
-	return w.UnSubscribe(makeArg("candle"+channel, instId), Business)
-}
-func (w *WsClient) MarkPrice(instId string, callback func(resp *WsResp[*MarkPrice])) error {
-	return Subscribe(w, makeArg("mark-price", instId), Public, callback, false)
-}
-func (w *WsClient) UMarkPrice(instId string) error {
-	return w.UnSubscribe(makeArg("mark-price", instId), Public)
+import "context"
+
+type BusinessClient struct {
+	WsClient
 }
 
-func (w *WsClient) OrderBook(channel, sprdId string, callback func(resp *WsResp[OrderBook])) error {
-	return Subscribe(w, makeSprdArg(channel, sprdId), Business, callback, false)
+func (w *BusinessClient) MarkPriceCandlesticks(ctx context.Context, channel, instId string, callback func(resp *WsResp[*MarkPriceCandle])) error {
+	if err := w.login(ctx); err != nil {
+		return err
+	}
+	return Subscribe(&w.WsClient, ctx, makeArg("candle"+channel, instId), callback)
 }
-func (w *WsClient) UOrderBook(channel, instId string) error {
-	return w.UnSubscribe(makeSprdArg(channel, instId), Business)
+func (w *BusinessClient) UMarkPriceCandlesticks(channel, instId string) error {
+	return w.unsubscribe(makeArg("mark-price-candle"+channel, instId))
+}
+func (w *BusinessClient) Candle(ctx context.Context, channel, instId string, callback func(resp *WsResp[*Candle])) error {
+	return Subscribe(&w.WsClient, ctx, makeArg("candle"+channel, instId), callback)
+}
+func (w *BusinessClient) UCandle(channel, instId string) error {
+	return w.unsubscribe(makeArg("candle"+channel, instId))
 }
 
-func (w *WsClient) Login(typ SvcType, callback func(resp *WsOriginResp)) error {
-	w.Conns[typ].RegCallback(Arg{
-		Channel: "login",
-	}.Key(), callback)
-	return w.Send(typ, Op{
-		Op:   "login",
-		Args: []map[string]string{w.keyConfig.makeWsSign()},
-	})
+type PublicClient struct {
+	WsClient
+}
+
+func (w *PublicClient) MarkPrice(ctx context.Context, instId string, callback func(resp *WsResp[*MarkPrice])) error {
+	return Subscribe(&w.WsClient, ctx, makeArg("mark-price", instId), callback)
+}
+func (w *PublicClient) UMarkPrice(instId string) error {
+	return w.unsubscribe(makeArg("mark-price", instId))
+}
+
+func (w *BusinessClient) OrderBook(ctx context.Context, channel, sprdId string, callback func(resp *WsResp[*OrderBook])) error {
+	return Subscribe(&w.WsClient, ctx, makeSprdArg(channel, sprdId), callback)
+}
+func (w *BusinessClient) UOrderBook(channel, instId string) error {
+	return w.unsubscribe(makeSprdArg(channel, instId))
 }
 
 //-------------------------- 交易 --------------------------
 
-// Account 资金频道
-func (w *WsClient) Account(callback func(resp *WsResp[Balance])) error {
-	return Subscribe(w, makeArg("account", ""), Private, callback, true)
+type PrivateClient struct {
+	WsClient
 }
-func (w *WsClient) UAccount() error {
-	return w.UnSubscribe(makeArg("account", ""), Private)
+
+// Account 资金频道
+func (w *PrivateClient) Account(ctx context.Context, callback func(resp *WsResp[*Balance])) error {
+	if err := w.login(ctx); err != nil {
+		return err
+	}
+	return Subscribe(&w.WsClient, ctx, makeArg("account", ""), callback)
+}
+func (w *PrivateClient) UAccount() error {
+	return w.unsubscribe(makeArg("account", ""))
 }
 
 // Positions 持仓频道
-func (w *WsClient) Positions(callback func(resp *WsResp[Balances])) error {
-	return Subscribe(w, makeArg("positions", ""), Private, callback, true)
+func (w *PrivateClient) Positions(ctx context.Context, callback func(resp *WsResp[*Balances])) error {
+	if err := w.login(ctx); err != nil {
+		return err
+	}
+	return Subscribe(&w.WsClient, ctx, makeArg("positions", ""), callback)
 }
 
 // Trades 成交订单频道
-func (w *WsClient) Trades(sprdId string, callback func(resp *WsResp[Trades])) error {
-	return Subscribe(w, makeSprdArg("sprd-trades", sprdId), Business, callback, true)
+func (w *BusinessClient) Trades(ctx context.Context, sprdId string, callback func(resp *WsResp[*Trades])) error {
+	if err := w.login(ctx); err != nil {
+		return err
+	}
+	return Subscribe(&w.WsClient, ctx, makeSprdArg("sprd-trades", sprdId), callback)
 }
 
 // UTrades 成交订单频道
-func (w *WsClient) UTrades(sprdId string) error {
-	return w.UnSubscribe(makeSprdArg("sprd-trades", sprdId), Business)
+func (w *BusinessClient) UTrades(sprdId string) error {
+	return w.unsubscribe(makeSprdArg("sprd-trades", sprdId))
 }
 
 // Orders 撮合交易订单频道
-func (w *WsClient) Orders(instType string, callback func(resp *WsResp[Order])) error {
-	return Subscribe(w, &Arg{
+func (w *PrivateClient) Orders(ctx context.Context, instType string, callback func(resp *WsResp[*Order])) error {
+	if err := w.login(ctx); err != nil {
+		return err
+	}
+	return Subscribe(&w.WsClient, ctx, &Arg{
 		Channel:  "orders",
 		InstType: instType,
-	}, Private, callback, true)
+	}, callback)
 }
 
 // UOrders 取消订阅撮合交易订单频道
-func (w *WsClient) UOrders(instType string) error {
-	return w.UnSubscribe(&Arg{
+func (w *PrivateClient) UOrders(instType string) error {
+	return w.unsubscribe(&Arg{
 		Channel:  "orders",
 		InstType: instType,
-	}, Private)
+	})
 }
 
 // SpotOrders 撮合交易订单频道
-func (w *WsClient) SpotOrders(callback func(resp *WsResp[Order])) error {
-	return Subscribe(w, &Arg{
+func (w *PrivateClient) SpotOrders(ctx context.Context, callback func(resp *WsResp[*Order])) error {
+	return Subscribe(&w.WsClient, ctx, &Arg{
 		Channel:  "orders",
 		InstType: "SPOT",
-	}, Private, callback, true)
+	}, callback)
 }
 
 // USpotOrders 取消订阅撮合交易订单频道
-func (w *WsClient) USpotOrders() error {
-	return w.UnSubscribe(&Arg{
+func (w *PrivateClient) USpotOrders() error {
+	return w.unsubscribe(&Arg{
 		Channel:  "orders",
 		InstType: "SPOT",
-	}, Private)
+	})
 }

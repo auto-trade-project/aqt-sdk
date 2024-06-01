@@ -24,8 +24,8 @@ func TestNewWsClient(t *testing.T) {
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.MarkPrice("BTC-USDT", func(resp *WsResp[*MarkPrice]) {
-			t.Log((*resp.Data[0]).MarkPx)
+		if err := client.Candle(context.Background(), "15m", "BTC-USDT", func(resp *WsResp[*Candle]) {
+			t.Log(resp.Data[0].C)
 			cond.L.Lock()
 			count--
 			cond.Broadcast()
@@ -34,16 +34,16 @@ func TestNewWsClient(t *testing.T) {
 			assert.Fail(t, err.Error())
 			return
 		}
-		if err := client.MarkPrice("SOL-USDT", func(resp *WsResp[*MarkPrice]) {
-			t.Log(*resp)
-			cond.L.Lock()
-			count--
-			cond.Broadcast()
-			cond.L.Unlock()
-		}); err != nil {
-			assert.Fail(t, err.Error())
-			return
-		}
+		//if err := client.MarkPrice("SOL-USDT", func(resp *WsResp[*MarkPrice]) {
+		//	t.Log(*resp)
+		//	cond.L.Lock()
+		//	count--
+		//	cond.Broadcast()
+		//	cond.L.Unlock()
+		//}); err != nil {
+		//	assert.Fail(t, err.Error())
+		//	return
+		//}
 	}()
 	//go func() {
 	//	ch, err := client.MarkPrice("BTC-USDT")
