@@ -24,8 +24,8 @@ func TestNewWsClient(t *testing.T) {
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.Candle(context.Background(), "15m", "BTC-USDT", func(resp *WsResp[*Candle]) {
-			t.Log(resp.Data[0].C)
+		if err := client.Orders(context.Background(), "BTC-USDT", func(resp *WsResp[*Order]) {
+			t.Log(resp.Data[0].ClOrdId)
 			cond.L.Lock()
 			count--
 			cond.Broadcast()
@@ -65,7 +65,7 @@ func TestNewWsClient(t *testing.T) {
 	//}()
 	isFailed := false
 	go func() {
-		<-time.After(time.Second * 20)
+		<-time.After(time.Second * 200000)
 
 		cond.L.Lock()
 		isFailed = true

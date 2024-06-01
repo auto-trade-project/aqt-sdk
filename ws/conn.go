@@ -117,7 +117,9 @@ func (c *Conn) UnregisterWatch(id string) {
 	defer c.lock.Unlock()
 
 	// 关闭、通知并回收资源
-	close(c.dataCh[id])
+	if ch, ok := c.dataCh[id]; ok {
+		close(ch)
+	}
 	delete(c.dataCh, id)
 }
 

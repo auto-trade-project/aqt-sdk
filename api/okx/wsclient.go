@@ -88,7 +88,7 @@ func (w *WsClient) send(data any) error {
 
 func (w *WsClient) login(ctx context.Context) error {
 	w.loginLocker.Lock()
-	defer w.loginLocker.RLock()
+	defer w.loginLocker.Unlock()
 	if w.isLogin {
 		return nil
 	}
@@ -122,6 +122,7 @@ func (w *WsClient) login(ctx context.Context) error {
 
 // 订阅
 func (w *WsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *WsOriginResp)) error {
+	defer w.send(Op{Op: "unsubscribe", Args: []*Arg{arg}})
 	return w.watch(ctx, arg.Key(), Op{Op: "subscribe", Args: []*Arg{arg}}, callback)
 }
 
@@ -142,10 +143,8 @@ func (w *WsClient) watch(ctx context.Context, key string, op Op, callback func(r
 	// 注册监听
 	ch := w.conn.RegisterWatch(key)
 	defer func() {
-		// 返回则取消订阅
+		// 返回则取消监听
 		w.conn.UnregisterWatch(key)
-		op.Op = "unsubscribe"
-		_ = w.send(op)
 	}()
 
 	for {

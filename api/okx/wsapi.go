@@ -83,32 +83,20 @@ func (w *PrivateClient) Orders(ctx context.Context, instType string, callback fu
 	if err := w.login(ctx); err != nil {
 		return err
 	}
-	return Subscribe(&w.WsClient, ctx, &Arg{
-		Channel:  "orders",
-		InstType: instType,
-	}, callback)
+	return Subscribe(&w.WsClient, ctx, makeArg("orders", instType), callback)
 }
 
 // UOrders 取消订阅撮合交易订单频道
 func (w *PrivateClient) UOrders(instType string) error {
-	return w.unsubscribe(&Arg{
-		Channel:  "orders",
-		InstType: instType,
-	})
+	return w.unsubscribe(makeArg("orders", instType))
 }
 
 // SpotOrders 撮合交易订单频道
 func (w *PrivateClient) SpotOrders(ctx context.Context, callback func(resp *WsResp[*Order])) error {
-	return Subscribe(&w.WsClient, ctx, &Arg{
-		Channel:  "orders",
-		InstType: "SPOT",
-	}, callback)
+	return Subscribe(&w.WsClient, ctx, makeArg("orders", "SPOT"), callback)
 }
 
 // USpotOrders 取消订阅撮合交易订单频道
 func (w *PrivateClient) USpotOrders() error {
-	return w.unsubscribe(&Arg{
-		Channel:  "orders",
-		InstType: "SPOT",
-	})
+	return w.unsubscribe(makeArg("orders", "SPOT"))
 }
