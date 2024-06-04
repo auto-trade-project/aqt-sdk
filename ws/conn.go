@@ -176,6 +176,7 @@ func (c *Conn) read() {
 		}
 		if c.keepaliveListenFn(data) {
 			c.Status = Alive
+			return
 		}
 		// 写入已注册的监听中
 		c.lock.RLock()

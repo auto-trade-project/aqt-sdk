@@ -65,10 +65,18 @@ type WsClient struct {
 	loginLocker sync.RWMutex
 	isLogin     bool
 	proxy       func(req *http.Request) (*url.URL, error)
+	callbacks   map[string]func(resp *WsOriginResp)
 }
 
 func NewBaseWsClient(typ SvcType, url BaseURL, keyConfig KeyConfig, proxy func(req *http.Request) (*url.URL, error)) *WsClient {
-	return &WsClient{typ: typ, url: url, keyConfig: keyConfig, proxy: proxy, log: DefaultLogger{}}
+	return &WsClient{
+		typ:       typ,
+		url:       url,
+		keyConfig: keyConfig,
+		proxy:     proxy,
+		log:       DefaultLogger{},
+		callbacks: map[string]func(resp *WsOriginResp){},
+	}
 }
 
 type ExchangeClient struct {
@@ -133,35 +141,17 @@ func (w *WsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *
 func (w *WsClient) unsubscribe(arg *Arg) error {
 	return w.send(Op{Op: "unsubscribe", Args: []*Arg{arg}})
 }
-
-// 监听
-func (w *WsClient) watch(ctx context.Context, key string, op Op, callback func(resp *WsOriginResp)) error {
-	if err := w.CheckConn(); err != nil {
-		return err
-	}
-	if err := w.send(op); err != nil {
-		return err
-	}
-
-	// 注册监听
-	ch := w.conn.RegisterWatch(key)
-	defer func() {
-		// 返回则取消监听
-		w.conn.UnregisterWatch(key)
-	}()
-
+func (w *WsClient) receive() {
+	ch := w.conn.RegisterWatch("receive")
 	for {
-		// 并发控制
 		select {
-		case <-ctx.Done():
-			return nil
 		case <-w.conn.Context().Done():
-			return context.Cause(w.conn.Context())
+			return
 		case data, ok := <-ch:
 			if !ok {
-				return errors.New("subscribe by cancel")
+				return
 			}
-			if data.Typ != websocket.TextMessage || string(data.Data) == "pong" {
+			if data.Typ != websocket.TextMessage {
 				continue
 			}
 			rp := &WsOriginResp{}
@@ -173,9 +163,37 @@ func (w *WsClient) watch(ctx context.Context, key string, op Op, callback func(r
 			if rp.Event == "error" {
 				w.log.Errorf(fmt.Sprintf("error msg:%v, data:%s", rp.Msg, string(data.Data)))
 			}
-			if key == rp.Arg.Key() || rp.Event == key {
+			w.readMonitor(rp.Arg)
+			if callback, ok := w.getWatch(rp.Arg.Key()); ok {
 				callback(rp)
 			}
+			if callback, ok := w.getWatch(rp.Event); ok {
+				callback(rp)
+			}
+		}
+	}
+}
+
+// 监听
+func (w *WsClient) watch(ctx context.Context, key string, op Op, callback func(resp *WsOriginResp)) error {
+	if err := w.CheckConn(); err != nil {
+		return err
+	}
+	if err := w.send(op); err != nil {
+		return err
+	}
+
+	// 注册监听
+	w.registerWatch(key, callback)
+	// 返回则取消监听
+	defer w.unregisterWatch(key)
+	for {
+		// 并发控制
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-w.conn.Context().Done():
+			return context.Cause(w.conn.Context())
 		}
 	}
 }
@@ -195,10 +213,12 @@ func (w *WsClient) CheckConn() error {
 			return nil
 		}
 
+		// 非健康情况重新进行拨号
 		conn, err := ws.DialContext(context.Background(), string(w.url), ws.WithProxy(w.proxy))
 		if err != nil {
 			return err
 		}
+		// 保持连接的依据
 		conn.SetKeepAlive(
 			func(conn *ws.Conn) error {
 				return conn.Write([]byte("ping"))
@@ -208,8 +228,30 @@ func (w *WsClient) CheckConn() error {
 			})
 		w.conn = conn
 		w.isLogin = false
+		go w.receive()
 	}
 	return nil
+}
+
+func (w *WsClient) registerWatch(key string, callback func(resp *WsOriginResp)) {
+	w.locker.Lock()
+	defer w.locker.Unlock()
+
+	w.callbacks[key] = callback
+}
+
+func (w *WsClient) unregisterWatch(key string) {
+	w.locker.Lock()
+	defer w.locker.Unlock()
+
+	delete(w.callbacks, key)
+}
+func (w *WsClient) getWatch(key string) (func(resp *WsOriginResp), bool) {
+	w.locker.RLock()
+	defer w.locker.RUnlock()
+
+	f, ok := w.callbacks[key]
+	return f, ok
 }
 
 func NewWsClient(ctx context.Context, keyConfig KeyConfig, env Destination, proxy ...string) *ExchangeClient {
