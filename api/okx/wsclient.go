@@ -70,12 +70,13 @@ type WsClient struct {
 
 func NewBaseWsClient(typ SvcType, url BaseURL, keyConfig KeyConfig, proxy func(req *http.Request) (*url.URL, error)) *WsClient {
 	return &WsClient{
-		typ:       typ,
-		url:       url,
-		keyConfig: keyConfig,
-		proxy:     proxy,
-		log:       DefaultLogger{},
-		callbacks: map[string]func(resp *WsOriginResp){},
+		typ:         typ,
+		url:         url,
+		keyConfig:   keyConfig,
+		proxy:       proxy,
+		log:         DefaultLogger{},
+		callbacks:   map[string]func(resp *WsOriginResp){},
+		readMonitor: func(arg Arg) {},
 	}
 }
 
@@ -143,6 +144,7 @@ func (w *WsClient) unsubscribe(arg *Arg) error {
 }
 func (w *WsClient) receive() {
 	ch := w.conn.RegisterWatch("receive")
+	defer w.conn.UnregisterWatch("receive")
 	for {
 		select {
 		case <-w.conn.Context().Done():
