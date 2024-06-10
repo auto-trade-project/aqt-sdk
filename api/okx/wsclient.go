@@ -133,9 +133,13 @@ func (w *WsClient) login(ctx context.Context) error {
 }
 
 // 订阅
-func (w *WsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *WsOriginResp)) error {
+func (w *WsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *WsOriginResp)) (err error) {
+	err = w.watch(ctx, arg.Key(), Op{Op: "subscribe", Args: []*Arg{arg}}, callback)
+	if err != nil {
+		return err
+	}
 	defer w.send(Op{Op: "unsubscribe", Args: []*Arg{arg}})
-	return w.watch(ctx, arg.Key(), Op{Op: "subscribe", Args: []*Arg{arg}}, callback)
+	return nil
 }
 
 // 取消订阅
