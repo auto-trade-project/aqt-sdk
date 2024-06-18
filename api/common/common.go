@@ -1,9 +1,10 @@
-package okx
+package common
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -84,11 +85,12 @@ func (m *RawMessage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type KeyConfig struct {
-	Apikey     string
-	Secretkey  string
-	Passphrase string
+type IKeyConfig interface {
+	MakeHeader(method, requestPath string, body []byte) http.Header
+	MakeWsSign() map[string]string
+	MakeSign(now, method, requestPath string, body []byte) (sign string)
 }
+
 type SubChannel struct {
 	Channel string `json:"channel"`
 	InstId  string `json:"instId"`
@@ -162,13 +164,13 @@ type Resp[T any] struct {
 	Data []T    `json:"data"`
 }
 
-func makeArg(channel, instId string) *Arg {
+func MakeArg(channel, instId string) *Arg {
 	return &Arg{
 		Channel: channel,
 		InstId:  instId,
 	}
 }
-func makeSprdArg(channel, sprdId string) *Arg {
+func MakeSprdArg(channel, sprdId string) *Arg {
 	return &Arg{
 		Channel: channel,
 		SprdId:  sprdId,
@@ -373,14 +375,14 @@ func (p *MarkPriceCandle) UnmarshalJSON(bytes []byte) (err error) {
 }
 
 func unmarshalSliceString(data []byte) ([]string, error) {
-	tmp, err := unmarshal[[]string](data)
+	tmp, err := Unmarshal[[]string](data)
 	if err != nil {
 		return nil, err
 	}
 	return *tmp, nil
 }
 
-func unmarshal[T any](data []byte) (*T, error) {
+func Unmarshal[T any](data []byte) (*T, error) {
 	t := new(T)
 	if err := json.Unmarshal(data, t); err != nil {
 		return nil, err

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kurosann/aqt-sdk/api/common"
 )
 
 var config = KeyConfig{
@@ -19,12 +21,12 @@ func TestNewWsClient(t *testing.T) {
 	client := NewWsClient(
 		context.Background(),
 		config,
-		TestServer,
+		common.TestServer,
 	)
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.Account(context.Background(), func(resp *WsResp[*Balance]) {
+		if err := client.Account(context.Background(), func(resp *common.WsResp[*common.Balance]) {
 			t.Log(resp.Data[0].Details)
 			cond.L.Lock()
 			count--
