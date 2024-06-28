@@ -79,6 +79,11 @@ func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, er
 func (c *Conn) Context() context.Context {
 	return c.ctx
 }
+func (c *Conn) Close(err error) {
+	c.cancel(err)
+	c.Status = Dead
+	_ = c.conn.Close()
+}
 func (c *Conn) SetKeepAlive(keepaliveFn func(conn *Conn) error, keepaliveListenFn func(data []byte) bool) {
 	c.keepaliveFn = keepaliveFn
 	c.keepaliveListenFn = keepaliveListenFn
@@ -96,16 +101,12 @@ func (c *Conn) keepalive() {
 		}
 		err := c.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(time.Second*3))
 		if err != nil {
-			c.Status = Dead
-			c.cancel(err)
-			_ = c.conn.Close()
+			c.Close(err)
 			return
 		}
 		err = c.keepaliveFn(c)
 		if err != nil {
-			c.Status = Dead
-			c.cancel(err)
-			_ = c.conn.Close()
+			c.Close(err)
 			return
 		}
 		time.Sleep(time.Second * 20)
@@ -146,13 +147,10 @@ func (c *Conn) Write(data []byte) error {
 	_ = c.conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
 	err := c.conn.WriteMessage(int(c.mt), data)
 	if err != nil {
-		c.Status = Dead
 		if context.Cause(c.ctx) != nil {
 			err = context.Cause(c.ctx)
-		} else {
-			c.cancel(err)
 		}
-		_ = c.conn.Close()
+		c.Close(err)
 		return err
 	}
 	return nil

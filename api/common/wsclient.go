@@ -168,6 +168,7 @@ func (w *WsClient) receive() {
 			}
 			if rp.Event == "error" {
 				w.Log.Errorf(fmt.Sprintf("error msg:%v, data:%s", rp.Msg, string(data.Data)))
+				w.conn.Close(errors.New(rp.Msg))
 			}
 			w.ReadMonitor(rp.Arg)
 			if callback, ok := w.getWatch(rp.Arg.Key()); ok {
