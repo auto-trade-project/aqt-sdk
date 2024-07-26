@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -63,7 +64,13 @@ func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, er
 	if c.proxy != nil {
 		dialer.Proxy = c.proxy
 	}
-	conn, rp, err := dialer.DialContext(ctx, address, nil)
+	dialer.TLSClientConfig = &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+
+	header := http.Header{}
+	header.Add("User-Agent", "Go websockets/13.0")
+	conn, rp, err := dialer.DialContext(ctx, address, header)
 	if err != nil {
 		return nil, err
 	}
