@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/kurosann/aqt-sdk/api/okx"
 	"time"
 )
 
@@ -28,7 +29,7 @@ type IMarketApi interface {
 }
 type IMarketExClient interface {
 	SetLog(logger ILogger)
-	ReadMonitor(f func(arg string))
+	ReadMonitor(f func(arg okx.Arg))
 	Account(ctx context.Context, callback func(resp Balance)) error
 	Candle(ctx context.Context, channel, instId string, callback func(resp *Candle)) error
 	MarkPrice(ctx context.Context, instId string, callback func(resp MarkPrice)) error
@@ -49,13 +50,16 @@ type MarkPrice struct {
 }
 
 type Candle struct {
-	TokenType string
-	Ts        string
-	O         string
-	H         string
-	L         string
-	C         string
-	Vol       string
+	TokenType   string
+	Ts          string
+	O           string
+	H           string
+	L           string
+	C           string
+	Vol         string
+	VolCcy      string
+	VolCcyQuote string
+	Confirm     string
 }
 type Balance struct {
 	TokenType string

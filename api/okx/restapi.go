@@ -87,3 +87,7 @@ func (c *RestClient) Balance(ctx context.Context, ccy string) (*Resp[Balance], e
 func (c *RestClient) Positions(ctx context.Context, req PositionReq) (*Resp[Balances], error) {
 	return Get[Balances](c, ctx, "/api/v5/account/positions", req)
 }
+
+type PublicRestClient struct {
+	RestClient
+}

@@ -24,25 +24,21 @@ type RestClient struct {
 	locker    sync.RWMutex
 }
 
-func NewRestClient(ctx context.Context, keyConfig OkxKeyConfig, env Destination, proxy ...string) *RestClient {
-	return NewRestClientWithCustom(ctx, keyConfig, env, DefaultRestUrl, proxy...)
+func NewRestClient(ctx context.Context, keyConfig OkxKeyConfig, env Destination, proxy func(req *http.Request) (*url.URL, error)) RestClient {
+	return NewRestClientWithCustom(ctx, keyConfig, env, DefaultRestUrl, proxy)
 }
 
-func NewRestClientWithCustom(ctx context.Context, keyConfig OkxKeyConfig, env Destination, urls map[Destination]BaseURL, proxy ...string) *RestClient {
+func NewRestClientWithCustom(ctx context.Context, keyConfig OkxKeyConfig, env Destination, urls map[Destination]BaseURL, proxy func(req *http.Request) (*url.URL, error)) RestClient {
 	ctx, cancel := context.WithCancel(ctx)
 	baseUrl, ok := urls[env]
 	if !ok {
 		panic("not support env")
 	}
 	proxyURL := http.ProxyFromEnvironment
-	if len(proxy) != 0 && proxy[0] != "" {
-		parse, err := url.Parse(proxy[0])
-		if err != nil {
-			panic(err.Error())
-		}
-		proxyURL = http.ProxyURL(parse)
+	if proxy != nil {
+		proxyURL = proxy
 	}
-	return &RestClient{
+	return RestClient{
 		ctx:       ctx,
 		cancel:    cancel,
 		baseUrl:   baseUrl,
