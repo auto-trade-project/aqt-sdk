@@ -1,4 +1,4 @@
-package common
+package okx
 
 import (
 	"context"
@@ -12,24 +12,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/kurosann/aqt-sdk/api"
 	"github.com/kurosann/aqt-sdk/ws"
 )
-
-type SvcType string
-
-const (
-	Public   SvcType = "Public"
-	Private  SvcType = "Private"
-	Business SvcType = "Business"
-)
-
-type ILogger interface {
-	Infof(template string, args ...interface{})
-	Debugf(template string, args ...interface{})
-	Warnf(template string, args ...interface{})
-	Errorf(template string, args ...interface{})
-	Panicf(template string, args ...interface{})
-}
 
 type DefaultLogger struct {
 }
@@ -54,17 +39,13 @@ func (w DefaultLogger) Panicf(template string, args ...interface{}) {
 	log.Printf(template, args...)
 }
 
-type ClientBase interface {
-	SetLog(logger ILogger)
-	SetReadMonitor(f func(arg Arg))
-}
-type WsClient struct {
+type BaseWsClient struct {
 	ctx         context.Context
 	typ         SvcType
 	conn        *ws.Conn
 	url         BaseURL
-	keyConfig   IKeyConfig
-	Log         ILogger
+	keyConfig   OkxKeyConfig
+	Log         api.ILogger
 	ReadMonitor func(arg Arg)
 	locker      sync.RWMutex
 	loginLocker sync.RWMutex
@@ -73,8 +54,8 @@ type WsClient struct {
 	callbacks   map[string]func(resp *WsOriginResp)
 }
 
-func NewBaseWsClient(ctx context.Context, typ SvcType, url BaseURL, keyConfig IKeyConfig, proxy func(req *http.Request) (*url.URL, error)) WsClient {
-	return WsClient{
+func NewBaseWsClient(ctx context.Context, typ SvcType, url BaseURL, keyConfig OkxKeyConfig, proxy func(req *http.Request) (*url.URL, error)) BaseWsClient {
+	return BaseWsClient{
 		ctx:         ctx,
 		typ:         typ,
 		url:         url,
@@ -86,7 +67,7 @@ func NewBaseWsClient(ctx context.Context, typ SvcType, url BaseURL, keyConfig IK
 	}
 }
 
-func (w *WsClient) send(data any) error {
+func (w *BaseWsClient) send(data any) error {
 	bs, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -95,7 +76,7 @@ func (w *WsClient) send(data any) error {
 	return w.conn.Write(bs)
 }
 
-func (w *WsClient) Login(ctx context.Context) error {
+func (w *BaseWsClient) Login(ctx context.Context) error {
 	w.loginLocker.Lock()
 	defer w.loginLocker.Unlock()
 	if w.isLogin {
@@ -133,7 +114,7 @@ func (w *WsClient) Login(ctx context.Context) error {
 }
 
 // 订阅
-func (w *WsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *WsOriginResp)) (err error) {
+func (w *BaseWsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *WsOriginResp)) (err error) {
 	err = w.watch(ctx, arg.Key(), Op{Op: "subscribe", Args: []*Arg{arg}}, callback)
 	if err != nil {
 		return err
@@ -143,10 +124,10 @@ func (w *WsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *
 }
 
 // 取消订阅
-func (w *WsClient) Unsubscribe(arg *Arg) error {
+func (w *BaseWsClient) Unsubscribe(arg *Arg) error {
 	return w.send(Op{Op: "unsubscribe", Args: []*Arg{arg}})
 }
-func (w *WsClient) receive() {
+func (w *BaseWsClient) receive() {
 	ch := w.conn.RegisterWatch("receive")
 	defer w.conn.UnregisterWatch("receive")
 	for {
@@ -182,7 +163,7 @@ func (w *WsClient) receive() {
 }
 
 // 监听
-func (w *WsClient) watch(ctx context.Context, key string, op Op, callback func(resp *WsOriginResp)) error {
+func (w *BaseWsClient) watch(ctx context.Context, key string, op Op, callback func(resp *WsOriginResp)) error {
 	if err := w.CheckConn(); err != nil {
 		return err
 	}
@@ -206,13 +187,13 @@ func (w *WsClient) watch(ctx context.Context, key string, op Op, callback func(r
 }
 
 // 判断连接存活的条件
-func (w *WsClient) isAlive() bool {
+func (w *BaseWsClient) isAlive() bool {
 	return w.conn != nil &&
 		w.conn.Status == ws.Alive
 }
 
 // CheckConn 检查连接是否健康
-func (w *WsClient) CheckConn() error {
+func (w *BaseWsClient) CheckConn() error {
 	if !w.isAlive() {
 		w.locker.Lock()
 		defer w.locker.Unlock()
@@ -240,20 +221,20 @@ func (w *WsClient) CheckConn() error {
 	return nil
 }
 
-func (w *WsClient) registerWatch(key string, callback func(resp *WsOriginResp)) {
+func (w *BaseWsClient) registerWatch(key string, callback func(resp *WsOriginResp)) {
 	w.locker.Lock()
 	defer w.locker.Unlock()
 
 	w.callbacks[key] = callback
 }
 
-func (w *WsClient) unregisterWatch(key string) {
+func (w *BaseWsClient) unregisterWatch(key string) {
 	w.locker.Lock()
 	defer w.locker.Unlock()
 
 	delete(w.callbacks, key)
 }
-func (w *WsClient) getWatch(key string) (func(resp *WsOriginResp), bool) {
+func (w *BaseWsClient) getWatch(key string) (func(resp *WsOriginResp), bool) {
 	w.locker.RLock()
 	defer w.locker.RUnlock()
 
@@ -261,7 +242,7 @@ func (w *WsClient) getWatch(key string) (func(resp *WsOriginResp), bool) {
 	return f, ok
 }
 
-func Subscribe[T any](c *WsClient, ctx context.Context, arg *Arg, callback func(resp *WsResp[T])) error {
+func Subscribe[T any](c *BaseWsClient, ctx context.Context, arg *Arg, callback func(resp *WsResp[T])) error {
 	return c.subscribe(ctx, arg, func(resp *WsOriginResp) {
 		if resp.Event == "subscribe" {
 			return

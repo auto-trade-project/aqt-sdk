@@ -1,10 +1,9 @@
-package common
+package okx
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 )
 
@@ -13,6 +12,13 @@ type (
 	BaseURL     string
 )
 
+type SvcType string
+
+const (
+	Public   SvcType = "Public"
+	Private  SvcType = "Private"
+	Business SvcType = "Business"
+)
 const (
 	NormalServer Destination = iota
 	AwsServer
@@ -83,12 +89,6 @@ func (m *RawMessage) UnmarshalJSON(data []byte) error {
 	}
 	*m = append((*m)[0:0], data...)
 	return nil
-}
-
-type IKeyConfig interface {
-	MakeHeader(method, requestPath string, body []byte) http.Header
-	MakeWsSign() map[string]string
-	MakeSign(now, method, requestPath string, body []byte) (sign string)
 }
 
 type SubChannel struct {

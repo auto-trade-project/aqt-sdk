@@ -8,12 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/kurosann/aqt-sdk/api/common"
+	"github.com/kurosann/aqt-sdk/api"
 )
 
 func TestNewRestClient(t *testing.T) {
-	client := NewRestClient(context.Background(), config, common.TestServer)
-	rp, err := client.Instruments(context.Background(), common.InstrumentsReq{
+	client := NewRestClient(context.Background(), config, api.TestServer)
+	rp, err := client.Instruments(context.Background(), InstrumentsReq{
 		InstType: "SPOT",
 	})
 	if err != nil {
@@ -24,12 +24,12 @@ func TestNewRestClient(t *testing.T) {
 }
 
 func TestHistoryMarkPriceCandles(t *testing.T) {
-	client := NewRestClient(context.Background(), config, common.TestServer)
+	client := NewRestClient(context.Background(), config, api.TestServer)
 	today := time.Now()
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()
 
-	rp, err := client.HistoryMarkPriceCandles(context.Background(), common.MarkPriceCandlesReq{
+	rp, err := client.HistoryMarkPriceCandles(context.Background(), MarkPriceCandlesReq{
 		InstID: "BTC-USDT",
 		After:  time.Now().UnixMilli(),
 		Before: startTime,
@@ -44,13 +44,13 @@ func TestHistoryMarkPriceCandles(t *testing.T) {
 }
 
 func TestGetCandlesticks(t *testing.T) {
-	client := NewRestClient(context.Background(), config, common.TestServer)
+	client := NewRestClient(context.Background(), config, api.TestServer)
 	today := time.Now()
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	var startTime = todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli()
 	rp, err := client.Candles(
 		context.Background(),
-		common.CandlesticksReq{
+		CandlesticksReq{
 			InstID: "BTC-USDT",
 			After:  time.Now().UnixMilli(),
 			Before: startTime,
