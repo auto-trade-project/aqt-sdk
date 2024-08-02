@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kurosann/aqt-sdk/api"
 )
 
 var config = OkxKeyConfig{
@@ -16,7 +18,7 @@ var config = OkxKeyConfig{
 }
 
 func TestNewWsClient(t *testing.T) {
-	client := NewExchangeClient(
+	client, _ := NewExchangeClient(
 		context.Background(),
 		WithConfig(config),
 		WithEnv(TestServer),
@@ -24,8 +26,8 @@ func TestNewWsClient(t *testing.T) {
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.Account(context.Background(), func(resp *WsResp[*Balance]) {
-			t.Log(resp.Data[0].Details)
+		if err := client.Account(context.Background(), func(resp api.Balance) {
+			t.Log(resp)
 			cond.L.Lock()
 			count--
 			cond.Broadcast()

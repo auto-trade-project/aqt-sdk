@@ -9,7 +9,7 @@ import (
 
 func WithConfig(keyConfig OkxKeyConfig) api.Opt {
 	return func(api api.IMarketApi) {
-		if client, ok := api.(ExchangeClient); ok {
+		if client, ok := api.(*ExchangeClient); ok {
 			client.keyConfig = keyConfig
 		}
 	}

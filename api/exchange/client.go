@@ -1,15 +1,16 @@
-package api
+package exchange
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/kurosann/aqt-sdk/api"
 	"github.com/kurosann/aqt-sdk/api/okx"
 )
 
-func NewMarketApi(ctx context.Context, opt OptInfo) (exchange IMarketApi, err error) {
+func NewMarketApi(ctx context.Context, opt api.OptInfo) (exchange api.IMarketApi, err error) {
 	switch opt.Exchange {
-	case OkxExchange:
+	case api.OkxExchange:
 		exchange, err = okx.NewExchangeClient(ctx, opt.Opts...)
 		if err != nil {
 			return nil, err

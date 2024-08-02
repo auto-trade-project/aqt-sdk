@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -22,7 +23,7 @@ type ExchangeClient struct {
 	proxy     func(req *http.Request) (*url.URL, error)
 }
 
-func (w *ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (api.PlaceOrder, error) {
+func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (api.PlaceOrder, error) {
 	order, err := w.rc.PlaceOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.ClOrdID,
@@ -42,8 +43,7 @@ func (w *ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) 
 	}, nil
 }
 
-func (w *ExchangeClient) GetOrder(ctx context.Context, req api.GetOrderReq) (api.Order, error) {
-	//TODO implement me
+func (w ExchangeClient) GetOrder(ctx context.Context, req api.GetOrderReq) (api.Order, error) {
 	order, err := w.rc.GetOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.OrderId,
@@ -60,7 +60,7 @@ func (w *ExchangeClient) GetOrder(ctx context.Context, req api.GetOrderReq) (api
 	return api.Order{
 		TokenType:  order.Data[0].InstId,
 		PlmOrderId: order.Data[0].OrdId,
-		SysOrdorId: order.Data[0].ClOrdId,
+		SysOrderId: order.Data[0].ClOrdId,
 		Side:       order.Data[0].Side,
 		Fee:        order.Data[0].Fee,
 		Px:         order.Data[0].Px,
@@ -70,7 +70,7 @@ func (w *ExchangeClient) GetOrder(ctx context.Context, req api.GetOrderReq) (api
 	}, nil
 }
 
-func (w *ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId string) error {
+func (w ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId string) error {
 	_, err := w.rc.CancelOrder(ctx, tokenType, orderId)
 	if err != nil {
 		return err
@@ -78,8 +78,7 @@ func (w *ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId str
 	return nil
 }
 
-func (w *ExchangeClient) Candles(ctx context.Context, req api.CandlesReq) ([]*api.Candle, error) {
-	//TODO implement me
+func (w ExchangeClient) Candles(ctx context.Context, req api.CandlesReq) ([]*api.Candle, error) {
 	candles, err := w.rc.Candles(ctx, CandlesticksReq{
 		InstID: req.TokenType,
 		Before: req.StartTime.UnixMilli(),
@@ -110,8 +109,7 @@ func (w *ExchangeClient) Candles(ctx context.Context, req api.CandlesReq) ([]*ap
 	return res, nil
 }
 
-func (w *ExchangeClient) Account(ctx context.Context, callback func(resp api.Balance)) error {
-	//TODO implement me
+func (w ExchangeClient) Account(ctx context.Context, callback func(resp api.Balance)) error {
 	return w.pvc.Account(ctx, func(resp *WsResp[*Balance]) {
 		for _, balance := range resp.Data {
 			for _, datum := range balance.Details {
@@ -126,7 +124,7 @@ func (w *ExchangeClient) Account(ctx context.Context, callback func(resp api.Bal
 	})
 }
 
-func (w *ExchangeClient) Candle(ctx context.Context, channel, instId string, callback func(resp *api.Candle)) error {
+func (w ExchangeClient) Candle(ctx context.Context, channel, instId string, callback func(resp *api.Candle)) error {
 	return w.bc.Candle(ctx, channel, instId, func(resp *WsResp[*Candle]) {
 		for _, datum := range resp.Data {
 			callback(&api.Candle{
@@ -143,8 +141,7 @@ func (w *ExchangeClient) Candle(ctx context.Context, channel, instId string, cal
 	})
 }
 
-func (w *ExchangeClient) MarkPrice(ctx context.Context, instId string, callback func(resp api.MarkPrice)) error {
-	//TODO implement me
+func (w ExchangeClient) MarkPrice(ctx context.Context, instId string, callback func(resp api.MarkPrice)) error {
 	return w.pc.MarkPrice(ctx, instId, func(resp *WsResp[*MarkPrice]) {
 		for _, datum := range resp.Data {
 			callback(api.MarkPrice{
@@ -156,8 +153,7 @@ func (w *ExchangeClient) MarkPrice(ctx context.Context, instId string, callback 
 	})
 }
 
-func (w *ExchangeClient) SpotOrders(ctx context.Context, callback func(resp api.Order)) error {
-	//TODO implement me
+func (w ExchangeClient) SpotOrders(ctx context.Context, callback func(resp api.Order)) error {
 	return w.pvc.SpotOrders(ctx, func(resp *WsResp[*Order]) {
 		for _, datum := range resp.Data {
 			timestampString := datum.FillTime
@@ -167,7 +163,7 @@ func (w *ExchangeClient) SpotOrders(ctx context.Context, callback func(resp api.
 				Px:         datum.Px,
 				TokenType:  datum.InstId,
 				PlmOrderId: datum.OrdId,
-				SysOrdorId: datum.ClOrdId,
+				SysOrderId: datum.ClOrdId,
 				Side:       datum.Side,
 				Fee:        datum.Fee,
 				Sz:         datum.Sz,
@@ -178,20 +174,26 @@ func (w *ExchangeClient) SpotOrders(ctx context.Context, callback func(resp api.
 	})
 }
 
-func (w *ExchangeClient) ReadMonitor(readMonitor func(arg Arg)) {
-	w.pc.ReadMonitor = readMonitor
-	w.bc.ReadMonitor = readMonitor
-	w.pvc.ReadMonitor = readMonitor
+func (w ExchangeClient) ReadMonitor(readMonitor func(arg string)) {
+	f := func(arg Arg) {
+		valueOfArg := reflect.ValueOf(arg)
+		strs := make([]string, 0, valueOfArg.NumField())
+		for i := 0; i < valueOfArg.NumField(); i++ {
+			field := valueOfArg.Field(i)
+			if field.String() != "" {
+				strs = append(strs, field.String())
+			}
+		}
+	}
+	w.pc.ReadMonitor = f
+	w.bc.ReadMonitor = f
+	w.pvc.ReadMonitor = f
 }
 
-func (w *ExchangeClient) SetLog(log api.ILogger) {
+func (w ExchangeClient) SetLog(log api.ILogger) {
 	w.pc.Log = log
 	w.bc.Log = log
 	w.pvc.Log = log
-}
-
-func (w *ExchangeClient) Close() {
-
 }
 
 func NewExchangeClient(ctx context.Context, opts ...api.Opt) (*ExchangeClient, error) {
