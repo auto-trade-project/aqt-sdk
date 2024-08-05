@@ -16,7 +16,7 @@ func WithConfig(keyConfig OkxKeyConfig) api.Opt {
 }
 func WithProxy(proxy string) api.Opt {
 	return func(api api.IMarketApi) {
-		if client, ok := api.(ExchangeClient); ok {
+		if client, ok := api.(*ExchangeClient); ok {
 			proxyURL := http.ProxyFromEnvironment
 			if proxy != "" {
 				parse, err := url.Parse(proxy)
@@ -31,14 +31,14 @@ func WithProxy(proxy string) api.Opt {
 }
 func WithEnv(env Destination) api.Opt {
 	return func(api api.IMarketApi) {
-		if client, ok := api.(ExchangeClient); ok {
+		if client, ok := api.(*ExchangeClient); ok {
 			client.env = env
 		}
 	}
 }
 func WithEndpoints(urls map[Destination]map[SvcType]BaseURL) api.Opt {
 	return func(api api.IMarketApi) {
-		if client, ok := api.(ExchangeClient); ok {
+		if client, ok := api.(*ExchangeClient); ok {
 			client.urls = urls
 		}
 	}
