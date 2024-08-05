@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kurosann/aqt-sdk/api"
@@ -184,6 +185,7 @@ func (w ExchangeClient) ReadMonitor(readMonitor func(arg string)) {
 				strs = append(strs, field.String())
 			}
 		}
+		readMonitor(strings.Join(strs, ":"))
 	}
 	w.pc.ReadMonitor = f
 	w.bc.ReadMonitor = f
