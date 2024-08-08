@@ -18,7 +18,8 @@ type ExchangeClient struct {
 	bc        *BusinessClient
 	pvc       *PrivateClient
 	rc        *PublicRestClient
-	urls      map[Destination]map[SvcType]BaseURL
+	wsUrls    map[Destination]map[SvcType]BaseURL
+	restUrls  map[Destination]BaseURL
 	env       Destination
 	keyConfig OkxKeyConfig
 	proxy     func(req *http.Request) (*url.URL, error)
@@ -200,9 +201,10 @@ func (w ExchangeClient) SetLog(log api.ILogger) {
 
 func NewExchangeClient(ctx context.Context, opts ...api.Opt) (*ExchangeClient, error) {
 	client := ExchangeClient{
-		proxy: http.ProxyFromEnvironment,
-		urls:  DefaultWsUrls,
-		env:   NormalServer,
+		proxy:    http.ProxyFromEnvironment,
+		wsUrls:   DefaultWsUrls,
+		restUrls: DefaultRestUrl,
+		env:      NormalServer,
 	}
 	for _, opt := range opts {
 		opt(&client)
@@ -210,9 +212,9 @@ func NewExchangeClient(ctx context.Context, opts ...api.Opt) (*ExchangeClient, e
 	if client.keyConfig.Apikey == "" {
 		return nil, errors.New("not config: Apikey or Secretkey or Passphrase")
 	}
-	client.pc = &PublicClient{BaseWsClient: NewBaseWsClient(ctx, Public, client.urls[client.env][Public], client.keyConfig, client.proxy)}
-	client.bc = &BusinessClient{BaseWsClient: NewBaseWsClient(ctx, Business, client.urls[client.env][Business], client.keyConfig, client.proxy)}
-	client.pvc = &PrivateClient{BaseWsClient: NewBaseWsClient(ctx, Private, client.urls[client.env][Private], client.keyConfig, client.proxy)}
-	client.rc = &PublicRestClient{RestClient: NewRestClient(ctx, client.keyConfig, client.env, client.proxy)}
+	client.pc = &PublicClient{BaseWsClient: NewBaseWsClient(ctx, Public, client.wsUrls[client.env][Public], client.keyConfig, client.proxy)}
+	client.bc = &BusinessClient{BaseWsClient: NewBaseWsClient(ctx, Business, client.wsUrls[client.env][Business], client.keyConfig, client.proxy)}
+	client.pvc = &PrivateClient{BaseWsClient: NewBaseWsClient(ctx, Private, client.wsUrls[client.env][Private], client.keyConfig, client.proxy)}
+	client.rc = &PublicRestClient{RestClient: NewRestClient(ctx, client.keyConfig, client.env, client.restUrls, client.proxy)}
 	return &client, nil
 }

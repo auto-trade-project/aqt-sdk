@@ -24,11 +24,7 @@ type RestClient struct {
 	locker    sync.RWMutex
 }
 
-func NewRestClient(ctx context.Context, keyConfig OkxKeyConfig, env Destination, proxy func(req *http.Request) (*url.URL, error)) RestClient {
-	return NewRestClientWithCustom(ctx, keyConfig, env, DefaultRestUrl, proxy)
-}
-
-func NewRestClientWithCustom(ctx context.Context, keyConfig OkxKeyConfig, env Destination, urls map[Destination]BaseURL, proxy func(req *http.Request) (*url.URL, error)) RestClient {
+func NewRestClient(ctx context.Context, keyConfig OkxKeyConfig, env Destination, urls map[Destination]BaseURL, proxy func(req *http.Request) (*url.URL, error)) RestClient {
 	ctx, cancel := context.WithCancel(ctx)
 	baseUrl, ok := urls[env]
 	if !ok {

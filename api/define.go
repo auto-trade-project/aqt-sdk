@@ -106,3 +106,7 @@ type OptInfo struct {
 	Exchange
 	Opts []Opt
 }
+
+func NewOptInfo(exchange Exchange, opts ...Opt) OptInfo {
+	return OptInfo{Exchange: exchange, Opts: opts}
+}

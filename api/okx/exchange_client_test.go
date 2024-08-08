@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kurosann/aqt-sdk/api"
+	"github.com/kurosann/aqt-sdk/api/exchange"
 )
 
 var config = OkxKeyConfig{
@@ -17,12 +18,17 @@ var config = OkxKeyConfig{
 	"",
 }
 
-func TestNewWsClient(t *testing.T) {
-	client, _ := NewExchangeClient(
-		context.Background(),
-		WithConfig(config),
-		WithEnv(TestServer),
+func newClient() api.IMarketApi {
+	client, _ := exchange.NewMarketApi(context.Background(),
+		UseOkxExchange(
+			WithConfig(config),
+			WithEnv(TestServer),
+		),
 	)
+	return client
+}
+func TestNewWsClient(t *testing.T) {
+	client := newClient()
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {

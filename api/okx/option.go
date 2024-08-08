@@ -36,16 +36,20 @@ func WithEnv(env Destination) api.Opt {
 		}
 	}
 }
-func WithEndpoints(urls map[Destination]map[SvcType]BaseURL) api.Opt {
+func WithWsEndpoints(urls map[Destination]map[SvcType]BaseURL) api.Opt {
 	return func(api api.IMarketApi) {
 		if client, ok := api.(*ExchangeClient); ok {
-			client.urls = urls
+			client.wsUrls = urls
+		}
+	}
+}
+func WithRestEndpoints(urls map[Destination]BaseURL) api.Opt {
+	return func(api api.IMarketApi) {
+		if client, ok := api.(*ExchangeClient); ok {
+			client.restUrls = urls
 		}
 	}
 }
 func UseOkxExchange(opts ...api.Opt) api.OptInfo {
-	return api.OptInfo{
-		Exchange: api.OkxExchange,
-		Opts:     opts,
-	}
+	return api.NewOptInfo(api.OkxExchange, opts...)
 }
