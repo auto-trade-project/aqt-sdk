@@ -32,6 +32,7 @@ func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (
 		Sz:      req.Sz,
 		Px:      req.Px,
 		Side:    req.Side,
+		TdMode:  "cash",
 		OrdType: req.OrdType,
 	})
 	if err != nil {
