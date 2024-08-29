@@ -1,4 +1,4 @@
-package okx
+package exchange
 
 import (
 	"context"
@@ -9,20 +9,20 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kurosann/aqt-sdk/api"
-	"github.com/kurosann/aqt-sdk/api/exchange"
+	"github.com/kurosann/aqt-sdk/api/okx"
 )
 
-var config = OkxKeyConfig{
+var config = okx.OkxKeyConfig{
 	"",
 	"",
 	"",
 }
 
 func newClient() api.IMarketApi {
-	client, _ := exchange.NewMarketApi(context.Background(),
-		UseOkxExchange(
-			WithConfig(config),
-			WithEnv(TestServer),
+	client, _ := NewMarketApi(context.Background(),
+		okx.UseOkxExchange(
+			okx.WithConfig(config),
+			okx.WithEnv(okx.NormalServer),
 		),
 	)
 	return client
@@ -32,7 +32,7 @@ func TestNewWsClient(t *testing.T) {
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.Account(context.Background(), func(resp api.Balance) {
+		if err := client.Candle(context.Background(), "15m", "JUP-USDT", func(resp *api.Candle) {
 			t.Log(resp)
 			cond.L.Lock()
 			count--
