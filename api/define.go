@@ -25,6 +25,7 @@ type ILogger interface {
 type IMarketApi interface {
 	IMarketClient
 	IMarketExClient
+	GetMarketName() string
 }
 type IMarketExClient interface {
 	SetLog(logger ILogger)

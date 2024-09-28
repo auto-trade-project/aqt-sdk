@@ -16,16 +16,16 @@ func WithConfig(keyConfig OkxKeyConfig) api.Opt {
 }
 func WithProxy(proxy string) api.Opt {
 	return func(api api.IMarketApi) {
-		if client, ok := api.(*ExchangeClient); ok {
-			proxyURL := http.ProxyFromEnvironment
-			if proxy != "" {
+		if proxy != "" {
+			if client, ok := api.(*ExchangeClient); ok {
+				proxyURL := http.ProxyFromEnvironment
 				parse, err := url.Parse(proxy)
 				if err != nil {
 					panic(err.Error())
 				}
 				proxyURL = http.ProxyURL(parse)
+				client.proxy = proxyURL
 			}
-			client.proxy = proxyURL
 		}
 	}
 }

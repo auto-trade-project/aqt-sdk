@@ -25,6 +25,10 @@ type ExchangeClient struct {
 	proxy     func(req *http.Request) (*url.URL, error)
 }
 
+func (w ExchangeClient) GetMarketName() string {
+	return "okex"
+}
+
 func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (api.PlaceOrder, error) {
 	order, err := w.rc.PlaceOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
@@ -87,6 +91,7 @@ func (w ExchangeClient) Candles(ctx context.Context, req api.CandlesReq) ([]*api
 		Before: req.StartTime.UnixMilli(),
 		After:  req.EndTime.UnixMilli(),
 		Limit:  req.Limit,
+		Bar:    req.Norm,
 	})
 	if err != nil {
 		return nil, err
