@@ -30,15 +30,15 @@ type IMarketApi interface {
 type IMarketExClient interface {
 	SetLog(logger ILogger)
 	ReadMonitor(f func(arg string))
-	Account(ctx context.Context, callback func(resp Balance)) error
-	Candle(ctx context.Context, channel, instId string, callback func(resp *Candle)) error
-	MarkPrice(ctx context.Context, instId string, callback func(resp MarkPrice)) error
-	SpotOrders(ctx context.Context, callback func(resp Order)) error
+	Account(ctx context.Context, callback func(resp *Balance)) error
+	Candle(ctx context.Context, channel, tokenType string, callback func(resp *Candle)) error
+	MarkPrice(ctx context.Context, instId string, callback func(resp *MarkPrice)) error
+	SpotOrders(ctx context.Context, callback func(resp *Order)) error
 }
 
 type IMarketClient interface {
-	PlaceOrder(ctx context.Context, req PlaceOrderReq) (PlaceOrder, error)
-	GetOrder(ctx context.Context, req GetOrderReq) (Order, error)
+	PlaceOrder(ctx context.Context, req PlaceOrderReq) (*PlaceOrder, error)
+	GetOrder(ctx context.Context, req GetOrderReq) (*Order, error)
 	CancelOrder(ctx context.Context, tokenType, orderId string) error
 	Candles(ctx context.Context, req CandlesReq) ([]*Candle, error)
 }

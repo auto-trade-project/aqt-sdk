@@ -29,7 +29,7 @@ func (w ExchangeClient) GetMarketName() string {
 	return "okex"
 }
 
-func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (api.PlaceOrder, error) {
+func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (*api.PlaceOrder, error) {
 	order, err := w.rc.PlaceOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.ClOrdID,
@@ -40,31 +40,31 @@ func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (
 		OrdType: req.OrdType,
 	})
 	if err != nil {
-		return api.PlaceOrder{}, err
+		return nil, err
 	}
 	if len(order.Data) == 0 {
-		return api.PlaceOrder{}, nil
+		return nil, nil
 	}
-	return api.PlaceOrder{
+	return &api.PlaceOrder{
 		OrderId: order.Data[0].OrdId,
 	}, nil
 }
 
-func (w ExchangeClient) GetOrder(ctx context.Context, req api.GetOrderReq) (api.Order, error) {
+func (w ExchangeClient) GetOrder(ctx context.Context, req api.GetOrderReq) (*api.Order, error) {
 	order, err := w.rc.GetOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.OrderId,
 	})
 	if err != nil {
-		return api.Order{}, err
+		return nil, err
 	}
 	if len(order.Data) == 0 {
-		return api.Order{}, nil
+		return nil, nil
 	}
 	timestampString := order.Data[0].CTime
 	// 将时间戳字符串转换为整数
 	timestampInt, _ := strconv.ParseInt(timestampString, 10, 64)
-	return api.Order{
+	return &api.Order{
 		TokenType:  order.Data[0].InstId,
 		PlmOrderId: order.Data[0].OrdId,
 		SysOrderId: order.Data[0].ClOrdId,
@@ -117,11 +117,11 @@ func (w ExchangeClient) Candles(ctx context.Context, req api.CandlesReq) ([]*api
 	return res, nil
 }
 
-func (w ExchangeClient) Account(ctx context.Context, callback func(resp api.Balance)) error {
+func (w ExchangeClient) Account(ctx context.Context, callback func(resp *api.Balance)) error {
 	return w.pvc.Account(ctx, func(resp *WsResp[*Balance]) {
 		for _, balance := range resp.Data {
 			for _, datum := range balance.Details {
-				callback(api.Balance{
+				callback(&api.Balance{
 					TokenType: datum.Ccy,
 					Balance:   datum.CashBal,
 					AvailBal:  datum.AvailBal,
@@ -149,10 +149,10 @@ func (w ExchangeClient) Candle(ctx context.Context, channel, instId string, call
 	})
 }
 
-func (w ExchangeClient) MarkPrice(ctx context.Context, instId string, callback func(resp api.MarkPrice)) error {
+func (w ExchangeClient) MarkPrice(ctx context.Context, instId string, callback func(resp *api.MarkPrice)) error {
 	return w.pc.MarkPrice(ctx, instId, func(resp *WsResp[*MarkPrice]) {
 		for _, datum := range resp.Data {
-			callback(api.MarkPrice{
+			callback(&api.MarkPrice{
 				Px:        datum.MarkPx,
 				TokenType: instId,
 				Ts:        datum.Ts,
@@ -161,13 +161,13 @@ func (w ExchangeClient) MarkPrice(ctx context.Context, instId string, callback f
 	})
 }
 
-func (w ExchangeClient) SpotOrders(ctx context.Context, callback func(resp api.Order)) error {
+func (w ExchangeClient) SpotOrders(ctx context.Context, callback func(resp *api.Order)) error {
 	return w.pvc.SpotOrders(ctx, func(resp *WsResp[*Order]) {
 		for _, datum := range resp.Data {
 			timestampString := datum.FillTime
 			// 将时间戳字符串转换为整数
 			timestampInt, _ := strconv.ParseInt(timestampString, 10, 64)
-			callback(api.Order{
+			callback(&api.Order{
 				Px:         datum.Px,
 				TokenType:  datum.InstId,
 				PlmOrderId: datum.OrdId,
