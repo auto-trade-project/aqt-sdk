@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -202,18 +203,15 @@ func (w *BaseWsClient) CheckConn() error {
 		}
 
 		// 非健康情况重新进行拨号
-		conn, err := ws.DialContext(w.ctx, string(w.url), ws.WithProxy(w.proxy))
+		conn, err := ws.DialContext(w.ctx,
+			string(w.url),
+			ws.WithProxy(w.proxy),
+			ws.WithKeepalive(time.Second*30,
+				func(conn *ws.Conn) error { return conn.Write([]byte("ping")) },
+				func(data []byte) bool { return string(data) == "pong" }))
 		if err != nil {
 			return err
 		}
-		// 保持连接的依据
-		conn.SetKeepAlive(
-			func(conn *ws.Conn) error {
-				return conn.Write([]byte("ping"))
-			},
-			func(data []byte) bool {
-				return string(data) == "pong"
-			})
 		w.conn = conn
 		w.isLogin = false
 		go w.receive()
