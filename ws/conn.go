@@ -31,31 +31,33 @@ const (
 
 // Conn ws连接
 type Conn struct {
-	ctx               context.Context
-	cancel            context.CancelCauseFunc
-	Status            Status
-	conn              *websocket.Conn
-	dataCh            map[string]chan Data
-	lock              sync.RWMutex
-	proxy             func(req *http.Request) (*url.URL, error)
-	writeTimeout      time.Duration // 写入超时时间
-	mt                MsgType       // 连接使用的消息类型
-	keepaliveFn       func(*Conn) error
-	keepaliveListenFn func([]byte) bool
+	ctx              context.Context
+	cancel           context.CancelCauseFunc
+	Status           Status
+	conn             *websocket.Conn
+	dataCh           map[string]chan Data
+	lock             sync.RWMutex
+	proxy            func(req *http.Request) (*url.URL, error)
+	writeTimeout     time.Duration // 写入超时时间
+	keepaliveTimeout time.Duration // 响应超时时间
+	mt               MsgType       // 连接使用的消息类型
+	keepalivePingFn  func(*Conn) error
+	keepalivePongFn  func([]byte) bool
 }
 
 // DialContext 拨号 使用context控制
 func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	c := &Conn{
-		ctx:               ctx,
-		cancel:            cancel,
-		Status:            Alive,
-		dataCh:            map[string]chan Data{},
-		writeTimeout:      time.Second * 3,
-		mt:                TextMessage,
-		keepaliveFn:       func(conn *Conn) error { return nil },
-		keepaliveListenFn: func(bytes []byte) bool { return true },
+		ctx:              ctx,
+		cancel:           cancel,
+		Status:           Alive,
+		dataCh:           map[string]chan Data{},
+		writeTimeout:     time.Second * 3,
+		keepaliveTimeout: time.Second * 30,
+		mt:               TextMessage,
+		keepalivePingFn:  func(conn *Conn) error { return nil },
+		keepalivePongFn:  func(bytes []byte) bool { return true },
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -91,10 +93,6 @@ func (c *Conn) Close(err error) {
 	c.Status = Dead
 	_ = c.conn.Close()
 }
-func (c *Conn) SetKeepAlive(keepaliveFn func(conn *Conn) error, keepaliveListenFn func(data []byte) bool) {
-	c.keepaliveFn = keepaliveFn
-	c.keepaliveListenFn = keepaliveListenFn
-}
 
 // keepalive
 func (c *Conn) keepalive() {
@@ -111,12 +109,12 @@ func (c *Conn) keepalive() {
 			c.Close(err)
 			return
 		}
-		err = c.keepaliveFn(c)
+		err = c.keepalivePingFn(c)
 		if err != nil {
 			c.Close(err)
 			return
 		}
-		time.Sleep(time.Second * 20)
+		time.Sleep(c.keepaliveTimeout - time.Second*10)
 	}
 }
 
@@ -172,14 +170,14 @@ func (c *Conn) read() {
 			return
 		default:
 		}
+		// 设置读取超时 超过读取不到任何数据将关闭连接
+		_ = c.conn.SetReadDeadline(time.Now().Add(c.keepaliveTimeout))
 		mt, data, err := c.conn.ReadMessage()
 		if err != nil {
-			c.Status = Dead
-			c.cancel(err)
-			_ = c.conn.Close()
+			c.Close(err)
 			return
 		}
-		if c.keepaliveListenFn(data) {
+		if c.keepalivePongFn(data) {
 			c.Status = Alive
 			continue
 		}

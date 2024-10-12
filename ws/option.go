@@ -18,6 +18,13 @@ func WithWriteTimeout(timeout time.Duration) Option {
 		conn.writeTimeout = timeout
 	}
 }
+func WithKeepalive(timeout time.Duration, keepalivePingFn func(*Conn) error, keepalivePongFn func([]byte) bool) Option {
+	return func(conn *Conn) {
+		conn.keepaliveTimeout = timeout
+		conn.keepalivePingFn = keepalivePingFn
+		conn.keepalivePongFn = keepalivePongFn
+	}
+}
 func WithMsgType(mt MsgType) Option {
 	return func(conn *Conn) {
 		conn.mt = mt
