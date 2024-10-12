@@ -50,7 +50,7 @@ func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (
 	}, nil
 }
 
-func (w ExchangeClient) GetOrder(ctx context.Context, req api.GetOrderReq) (*api.Order, error) {
+func (w ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*api.Order, error) {
 	order, err := w.rc.GetOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.OrderId,
@@ -85,7 +85,7 @@ func (w ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId stri
 	return nil
 }
 
-func (w ExchangeClient) Candles(ctx context.Context, req api.CandlesReq) ([]*api.Candle, error) {
+func (w ExchangeClient) QueryCandles(ctx context.Context, req api.CandlesReq) ([]*api.Candle, error) {
 	candles, err := w.rc.Candles(ctx, CandlesticksReq{
 		InstID: req.TokenType,
 		Before: req.StartTime.UnixMilli(),
@@ -117,11 +117,11 @@ func (w ExchangeClient) Candles(ctx context.Context, req api.CandlesReq) ([]*api
 	return res, nil
 }
 
-func (w ExchangeClient) Account(ctx context.Context, callback func(resp *api.Balance)) error {
+func (w ExchangeClient) AssetListen(ctx context.Context, callback func(resp *api.Asset)) error {
 	return w.pvc.Account(ctx, func(resp *WsResp[*Balance]) {
 		for _, balance := range resp.Data {
 			for _, datum := range balance.Details {
-				callback(&api.Balance{
+				callback(&api.Asset{
 					TokenType: datum.Ccy,
 					Balance:   datum.CashBal,
 					AvailBal:  datum.AvailBal,
@@ -132,7 +132,7 @@ func (w ExchangeClient) Account(ctx context.Context, callback func(resp *api.Bal
 	})
 }
 
-func (w ExchangeClient) Candle(ctx context.Context, channel, instId string, callback func(resp *api.Candle)) error {
+func (w ExchangeClient) CandleListen(ctx context.Context, channel, instId string, callback func(resp *api.Candle)) error {
 	return w.bc.Candle(ctx, channel, instId, func(resp *WsResp[*Candle]) {
 		for _, datum := range resp.Data {
 			callback(&api.Candle{
@@ -149,7 +149,7 @@ func (w ExchangeClient) Candle(ctx context.Context, channel, instId string, call
 	})
 }
 
-func (w ExchangeClient) MarkPrice(ctx context.Context, instId string, callback func(resp *api.MarkPrice)) error {
+func (w ExchangeClient) MarkPriceListen(ctx context.Context, instId string, callback func(resp *api.MarkPrice)) error {
 	return w.pc.MarkPrice(ctx, instId, func(resp *WsResp[*MarkPrice]) {
 		for _, datum := range resp.Data {
 			callback(&api.MarkPrice{
@@ -161,7 +161,7 @@ func (w ExchangeClient) MarkPrice(ctx context.Context, instId string, callback f
 	})
 }
 
-func (w ExchangeClient) SpotOrders(ctx context.Context, callback func(resp *api.Order)) error {
+func (w ExchangeClient) OrderListen(ctx context.Context, callback func(resp *api.Order)) error {
 	return w.pvc.SpotOrders(ctx, func(resp *WsResp[*Order]) {
 		for _, datum := range resp.Data {
 			timestampString := datum.FillTime

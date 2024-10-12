@@ -30,17 +30,17 @@ type IMarketApi interface {
 type IMarketExClient interface {
 	SetLog(logger ILogger)
 	ReadMonitor(f func(arg string))
-	Account(ctx context.Context, callback func(resp *Balance)) error
-	Candle(ctx context.Context, channel, tokenType string, callback func(resp *Candle)) error
-	MarkPrice(ctx context.Context, instId string, callback func(resp *MarkPrice)) error
-	SpotOrders(ctx context.Context, callback func(resp *Order)) error
+	AssetListen(ctx context.Context, callback func(resp *Asset)) error
+	CandleListen(ctx context.Context, channel, tokenType string, callback func(resp *Candle)) error
+	MarkPriceListen(ctx context.Context, instId string, callback func(resp *MarkPrice)) error
+	OrderListen(ctx context.Context, callback func(resp *Order)) error
 }
 
 type IMarketClient interface {
 	PlaceOrder(ctx context.Context, req PlaceOrderReq) (*PlaceOrder, error)
-	GetOrder(ctx context.Context, req GetOrderReq) (*Order, error)
+	QueryOrder(ctx context.Context, req GetOrderReq) (*Order, error)
 	CancelOrder(ctx context.Context, tokenType, orderId string) error
-	Candles(ctx context.Context, req CandlesReq) ([]*Candle, error)
+	QueryCandles(ctx context.Context, req CandlesReq) ([]*Candle, error)
 }
 
 type MarkPrice struct {
@@ -61,7 +61,7 @@ type Candle struct {
 	VolCcyQuote string
 	Confirm     string
 }
-type Balance struct {
+type Asset struct {
 	TokenType string
 	Balance   string
 	AvailBal  string
