@@ -18,7 +18,7 @@ var config = okx.OkxKeyConfig{
 	"",
 }
 
-func newClient() api.IMarketApi {
+func newClient() api.IMarketClient {
 	client, _ := NewMarketApi(context.Background(),
 		okx.UseOkxExchange(
 			okx.WithConfig(config),

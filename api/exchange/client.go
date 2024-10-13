@@ -8,7 +8,7 @@ import (
 	"github.com/kurosann/aqt-sdk/api/okx"
 )
 
-func NewMarketApi(ctx context.Context, opt api.OptInfo) (exchange api.IMarketApi, err error) {
+func NewMarketApi(ctx context.Context, opt api.OptInfo) (exchange api.IMarketClient, err error) {
 	switch opt.Exchange {
 	case api.OkxExchange:
 		exchange, err = okx.NewExchangeClient(ctx, opt.Opts...)

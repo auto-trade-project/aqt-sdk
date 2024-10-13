@@ -22,12 +22,12 @@ type ILogger interface {
 	Panicf(template string, args ...interface{})
 }
 
-type IMarketApi interface {
-	IMarketClient
-	IMarketExClient
+type IMarketClient interface {
+	IMarketUnaryClient
+	IMarketStreamClient
 	GetMarketName() string
 }
-type IMarketExClient interface {
+type IMarketStreamClient interface {
 	SetLog(logger ILogger)
 	ReadMonitor(f func(arg string))
 	AssetListen(ctx context.Context, callback func(resp *Asset)) error
@@ -35,12 +35,23 @@ type IMarketExClient interface {
 	MarkPriceListen(ctx context.Context, instId string, callback func(resp *MarkPrice)) error
 	OrderListen(ctx context.Context, callback func(resp *Order)) error
 }
-
-type IMarketClient interface {
+type IMarketUnaryClient interface {
 	PlaceOrder(ctx context.Context, req PlaceOrderReq) (*PlaceOrder, error)
 	QueryOrder(ctx context.Context, req GetOrderReq) (*Order, error)
 	CancelOrder(ctx context.Context, tokenType, orderId string) error
 	QueryCandles(ctx context.Context, req CandlesReq) ([]*Candle, error)
+}
+
+type NewStreamClient interface {
+	New(conn IConnect) IMarketStreamClient
+}
+type Dial interface {
+	Dial() (IConnect, error)
+}
+type IConnect interface {
+	Open() error
+	IsAlive() error
+	Reload() error
 }
 
 type MarkPrice struct {
@@ -101,7 +112,7 @@ type CandlesReq struct {
 	Limit     int64
 	Norm      string
 }
-type Opt func(api IMarketApi)
+type Opt func(api IMarketClient)
 
 type OptInfo struct {
 	Exchange
