@@ -101,9 +101,10 @@ func (w ExchangeClient) QueryCandles(ctx context.Context, req api.CandlesReq) ([
 	}
 	res := make([]*api.Candle, len(candles.Data))
 	for i, datum := range candles.Data {
+		timestampInt, _ := strconv.ParseInt(datum.Ts, 10, 64)
 		res[i] = &api.Candle{
 			TokenType:   req.TokenType,
-			Ts:          datum.Ts,
+			Ts:          time.UnixMilli(timestampInt),
 			O:           datum.O,
 			H:           datum.H,
 			L:           datum.L,
@@ -135,9 +136,10 @@ func (w ExchangeClient) AssetListen(ctx context.Context, callback func(resp *api
 func (w ExchangeClient) CandleListen(ctx context.Context, channel, instId string, callback func(resp *api.Candle)) error {
 	return w.bc.Candle(ctx, channel, instId, func(resp *WsResp[*Candle]) {
 		for _, datum := range resp.Data {
+			timestampInt, _ := strconv.ParseInt(datum.Ts, 10, 64)
 			callback(&api.Candle{
 				TokenType: instId,
-				Ts:        datum.Ts,
+				Ts:        time.UnixMilli(timestampInt),
 				O:         datum.O,
 				H:         datum.H,
 				L:         datum.L,

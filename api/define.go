@@ -62,7 +62,7 @@ type MarkPrice struct {
 
 type Candle struct {
 	TokenType   string
-	Ts          string
+	Ts          time.Time
 	O           string
 	H           string
 	L           string
