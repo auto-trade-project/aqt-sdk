@@ -154,10 +154,11 @@ func (w ExchangeClient) CandleListen(ctx context.Context, channel, instId string
 func (w ExchangeClient) MarkPriceListen(ctx context.Context, instId string, callback func(resp *api.MarkPrice)) error {
 	return w.pc.MarkPrice(ctx, instId, func(resp *WsResp[*MarkPrice]) {
 		for _, datum := range resp.Data {
+			t, _ := strconv.Atoi(datum.Ts)
 			callback(&api.MarkPrice{
 				Px:        datum.MarkPx,
 				TokenType: instId,
-				Ts:        datum.Ts,
+				Ts:        time.UnixMilli(int64(t)),
 			})
 		}
 	})

@@ -57,7 +57,7 @@ type IConnect interface {
 type MarkPrice struct {
 	TokenType string
 	Px        string
-	Ts        string
+	Ts        time.Time
 }
 
 type Candle struct {
