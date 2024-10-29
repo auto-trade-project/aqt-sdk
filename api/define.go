@@ -22,7 +22,6 @@ type IMarketClient interface {
 }
 
 type IMarketStreamClient interface {
-	ReadMonitor(f func(arg string))
 	AssetListen(ctx context.Context, callback func(resp *Asset)) error
 	CandleListen(ctx context.Context, channel, tokenType string, callback func(resp *Candle)) error
 	MarkPriceListen(ctx context.Context, instId string, callback func(resp *MarkPrice)) error
