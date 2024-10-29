@@ -5,67 +5,69 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/gorilla/websocket"
 
 	"github.com/kurosann/aqt-sdk/api"
 	"github.com/kurosann/aqt-sdk/ws"
 )
 
-type DefaultLogger struct {
-}
+const (
+	reconnectDelay    = 5 * time.Second
+	keepAliveInterval = 30 * time.Second
+)
 
-func (w DefaultLogger) Infof(template string, args ...interface{}) {
-	log.Printf(template, args...)
-}
-
-func (w DefaultLogger) Debugf(template string, args ...interface{}) {
-	log.Printf(template, args...)
-}
-
-func (w DefaultLogger) Warnf(template string, args ...interface{}) {
-	log.Printf(template, args...)
-}
-
-func (w DefaultLogger) Errorf(template string, args ...interface{}) {
-	log.Printf(template, args...)
-}
-
-func (w DefaultLogger) Panicf(template string, args ...interface{}) {
-	log.Printf(template, args...)
+type WsInfo struct {
+	typ               SvcType
+	url               BaseURL
+	keyConfig         OkxKeyConfig
+	proxy             func(req *http.Request) (*url.URL, error)
+	readMonitor       func(arg Arg)
+	log               api.ILogger
+	reconnectAttempts int
+	keepAliveTimeout  time.Duration
 }
 
 type BaseWsClient struct {
-	ctx         context.Context
-	typ         SvcType
-	conn        *ws.Conn
-	url         BaseURL
-	keyConfig   OkxKeyConfig
-	Log         api.ILogger
-	ReadMonitor func(arg Arg)
-	locker      sync.RWMutex
-	loginLocker sync.RWMutex
-	isLogin     bool
-	proxy       func(req *http.Request) (*url.URL, error)
-	callbacks   map[string]func(resp *WsOriginResp)
+	ctx           context.Context
+	cancel        context.CancelFunc
+	typ           SvcType
+	conn          *ws.Conn
+	url           BaseURL
+	keyConfig     OkxKeyConfig
+	log           api.ILogger
+	readMonitor   func(arg Arg)
+	locker        sync.RWMutex
+	loginLocker   sync.RWMutex
+	isLogin       bool
+	proxy         func(req *http.Request) (*url.URL, error)
+	callbacks     map[string]func(resp *WsOriginResp)
+	reconnecting  atomic.Bool
+	closeOnce     sync.Once
+	subscriptions sync.Map // 存储当前活跃的订阅
 }
 
-func NewBaseWsClient(ctx context.Context, typ SvcType, url BaseURL, keyConfig OkxKeyConfig, proxy func(req *http.Request) (*url.URL, error)) BaseWsClient {
-	return BaseWsClient{
+func NewBaseWsClient(ctx context.Context, info WsInfo) *BaseWsClient {
+	ctx, cancel := context.WithCancel(ctx)
+	client := &BaseWsClient{
 		ctx:         ctx,
-		typ:         typ,
-		url:         url,
-		keyConfig:   keyConfig,
-		proxy:       proxy,
-		Log:         DefaultLogger{},
-		callbacks:   map[string]func(resp *WsOriginResp){},
-		ReadMonitor: func(arg Arg) {},
+		cancel:      cancel,
+		typ:         info.typ,
+		url:         info.url,
+		keyConfig:   info.keyConfig,
+		proxy:       info.proxy,
+		log:         info.log,
+		callbacks:   make(map[string]func(resp *WsOriginResp)),
+		readMonitor: info.readMonitor,
 	}
+
+	// 启动自动重连
+	go client.autoReconnect()
+
+	return client
 }
 
 func (w *BaseWsClient) send(data any) error {
@@ -73,7 +75,7 @@ func (w *BaseWsClient) send(data any) error {
 	if err != nil {
 		return err
 	}
-	w.Log.Infof(fmt.Sprintf("%s:send %s", w.typ, string(bs)))
+	w.log.Infof(fmt.Sprintf("%s:send %s", w.typ, string(bs)))
 	return w.conn.Write(bs)
 }
 
@@ -93,7 +95,7 @@ func (w *BaseWsClient) Login(ctx context.Context) error {
 		Args: []map[string]string{w.keyConfig.MakeWsSign()},
 	}, func(rp *WsOriginResp) {
 		if rp.Code != "0" {
-			w.Log.Errorf(fmt.Sprintf("%s:read ws err: %v", w.typ, rp))
+			w.log.Errorf(fmt.Sprintf("%s:read ws err: %v", w.typ, rp))
 			cancel(errors.New(rp.Msg))
 		} else {
 			cancel(nil)
@@ -116,6 +118,13 @@ func (w *BaseWsClient) Login(ctx context.Context) error {
 
 // 订阅
 func (w *BaseWsClient) subscribe(ctx context.Context, arg *Arg, callback func(resp *WsOriginResp)) (err error) {
+	// 保存订阅信息
+	w.subscriptions.Store(arg.Key(), subscriptionInfo{
+		arg:      arg,
+		callback: callback,
+	})
+	defer w.subscriptions.Delete(arg.Key())
+
 	err = w.watch(ctx, arg.Key(), Op{Op: "subscribe", Args: []*Arg{arg}}, callback)
 	if err != nil {
 		return err
@@ -126,38 +135,29 @@ func (w *BaseWsClient) subscribe(ctx context.Context, arg *Arg, callback func(re
 
 // 取消订阅
 func (w *BaseWsClient) Unsubscribe(arg *Arg) error {
+	w.subscriptions.Delete(arg.Key())
 	return w.send(Op{Op: "unsubscribe", Args: []*Arg{arg}})
 }
+
 func (w *BaseWsClient) receive() {
-	ch := w.conn.RegisterWatch("receive")
+	ch, err := w.conn.RegisterWatch("receive")
+	if err != nil {
+		w.log.Errorf("%s: failed to register watch: %v", w.typ, err)
+		return
+	}
 	defer w.conn.UnregisterWatch("receive")
+
 	for {
 		select {
-		case <-w.conn.Context().Done():
+		case <-w.ctx.Done():
 			return
 		case data, ok := <-ch:
 			if !ok {
 				return
 			}
-			if data.Typ != websocket.TextMessage {
-				continue
-			}
-			rp := &WsOriginResp{}
-			err := json.Unmarshal(data.Data, rp)
-			if err != nil {
-				w.Log.Errorf(fmt.Sprintf("msg:%v, data:%s", err.Error(), string(data.Data)))
-				continue
-			}
-			if rp.Event == "error" {
-				w.Log.Errorf(fmt.Sprintf("error msg:%v, data:%s", rp.Msg, string(data.Data)))
-				w.conn.Close(errors.New(rp.Msg))
-			}
-			w.ReadMonitor(rp.Arg)
-			if callback, ok := w.getWatch(rp.Arg.Key()); ok {
-				callback(rp)
-			}
-			if callback, ok := w.getWatch(rp.Event); ok {
-				callback(rp)
+
+			if err := w.handleMessage(data); err != nil {
+				w.log.Errorf("%s: message handling error: %v", w.typ, err)
 			}
 		}
 	}
@@ -190,7 +190,7 @@ func (w *BaseWsClient) watch(ctx context.Context, key string, op Op, callback fu
 // 判断连接存活的条件
 func (w *BaseWsClient) isAlive() bool {
 	return w.conn != nil &&
-		w.conn.Status == ws.Alive
+		w.conn.Status() == ws.Alive
 }
 
 // CheckConn 检查连接是否健康
@@ -232,6 +232,7 @@ func (w *BaseWsClient) unregisterWatch(key string) {
 
 	delete(w.callbacks, key)
 }
+
 func (w *BaseWsClient) getWatch(key string) (func(resp *WsOriginResp), bool) {
 	w.locker.RLock()
 	defer w.locker.RUnlock()
@@ -248,7 +249,7 @@ func Subscribe[T any](c *BaseWsClient, ctx context.Context, arg *Arg, callback f
 		var t []T
 		err := json.Unmarshal(resp.Data, &t)
 		if err != nil {
-			c.Log.Errorf(err.Error())
+			c.log.Errorf(err.Error())
 			return
 		}
 		callback(&WsResp[T]{
@@ -260,4 +261,100 @@ func Subscribe[T any](c *BaseWsClient, ctx context.Context, arg *Arg, callback f
 			Data:   t,
 		})
 	})
+}
+
+func (w *BaseWsClient) Close() {
+	w.closeOnce.Do(func() {
+		w.cancel()
+		if w.conn != nil {
+			w.conn.Close(nil)
+		}
+	})
+}
+
+func (w *BaseWsClient) autoReconnect() {
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		case <-time.After(reconnectDelay):
+			if !w.isAlive() && !w.reconnecting.Load() {
+				w.reconnecting.Store(true)
+				w.log.Infof("%s: attempting to reconnect...", w.typ)
+
+				if err := w.CheckConn(); err != nil {
+					w.log.Errorf("%s: reconnection failed: %v", w.typ, err)
+					continue
+				}
+
+				// 重新登录
+				if err := w.Login(w.ctx); err != nil {
+					w.log.Errorf("%s: relogin failed: %v", w.typ, err)
+					continue
+				}
+
+				// 重新订阅之前的频道
+				w.resubscribeChannels()
+				w.reconnecting.Store(false)
+			}
+		}
+	}
+}
+
+func (w *BaseWsClient) handleMessage(data ws.Data) error {
+	if data.Type != ws.TextMessage {
+		return nil
+	}
+
+	rp := &WsOriginResp{}
+	if err := json.Unmarshal(data.Data, rp); err != nil {
+		return fmt.Errorf("unmarshal error: %w, data: %s", err, string(data.Data))
+	}
+
+	if rp.Event == "error" {
+		err := errors.New(rp.Msg)
+		w.conn.Close(err)
+		return err
+	}
+
+	w.readMonitor(rp.Arg)
+
+	// 处理回调
+	if callback, ok := w.getWatch(rp.Arg.Key()); ok {
+		callback(rp)
+	}
+	if callback, ok := w.getWatch(rp.Event); ok {
+		callback(rp)
+	}
+
+	return nil
+}
+
+func (w *BaseWsClient) resubscribeChannels() {
+	w.subscriptions.Range(func(key, value interface{}) bool {
+		info := value.(subscriptionInfo)
+
+		// 为每个订阅创建新的上下文
+		ctx, cancel := context.WithTimeout(w.ctx, 10*time.Second)
+		defer cancel()
+
+		// 重新订阅
+		err := w.watch(ctx, info.arg.Key(), Op{
+			Op:   "subscribe",
+			Args: []*Arg{info.arg},
+		}, info.callback)
+
+		if err != nil {
+			w.log.Errorf("%s: failed to resubscribe channel %s: %v", w.typ, info.arg.Key(), err)
+			return true // 继续处理下一个订阅
+		}
+
+		w.log.Infof("%s: successfully resubscribed to channel %s", w.typ, info.arg.Key())
+		return true
+	})
+}
+
+type subscriptionInfo struct {
+	arg      *Arg
+	callback func(resp *WsOriginResp)
 }

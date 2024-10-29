@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -14,21 +15,13 @@ const (
 	//BalanceExchange = Exchange("balance")
 )
 
-type ILogger interface {
-	Infof(template string, args ...interface{})
-	Debugf(template string, args ...interface{})
-	Warnf(template string, args ...interface{})
-	Errorf(template string, args ...interface{})
-	Panicf(template string, args ...interface{})
-}
-
 type IMarketClient interface {
 	IMarketUnaryClient
 	IMarketStreamClient
 	GetMarketName() string
 }
+
 type IMarketStreamClient interface {
-	SetLog(logger ILogger)
 	ReadMonitor(f func(arg string))
 	AssetListen(ctx context.Context, callback func(resp *Asset)) error
 	CandleListen(ctx context.Context, channel, tokenType string, callback func(resp *Candle)) error
@@ -42,6 +35,12 @@ type IMarketUnaryClient interface {
 	QueryCandles(ctx context.Context, req CandlesReq) ([]*Candle, error)
 }
 
+type ISetLogger interface {
+	SetLog(logger ILogger)
+}
+type IReadMonitor interface {
+	ReadMonitor(f func(arg string))
+}
 type NewStreamClient interface {
 	New(conn IConnect) IMarketStreamClient
 }
@@ -52,6 +51,31 @@ type IConnect interface {
 	Open() error
 	IsAlive() error
 	Reload() error
+}
+
+type ILogger interface {
+	Infof(template string, args ...interface{})
+	Debugf(template string, args ...interface{})
+	Warnf(template string, args ...interface{})
+	Errorf(template string, args ...interface{})
+	Panicf(template string, args ...interface{})
+}
+type DefaultLogger struct{}
+
+func (l DefaultLogger) Infof(template string, args ...interface{}) {
+	fmt.Printf(template, args...)
+}
+func (l DefaultLogger) Debugf(template string, args ...interface{}) {
+	fmt.Printf(template, args...)
+}
+func (l DefaultLogger) Warnf(template string, args ...interface{}) {
+	fmt.Printf(template, args...)
+}
+func (l DefaultLogger) Errorf(template string, args ...interface{}) {
+	fmt.Printf(template, args...)
+}
+func (l DefaultLogger) Panicf(template string, args ...interface{}) {
+	fmt.Printf(template, args...)
 }
 
 type MarkPrice struct {

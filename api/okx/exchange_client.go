@@ -14,22 +14,24 @@ import (
 )
 
 type ExchangeClient struct {
-	pc        *PublicClient
-	bc        *BusinessClient
-	pvc       *PrivateClient
-	rc        *PublicRestClient
-	wsUrls    map[Destination]map[SvcType]BaseURL
-	restUrls  map[Destination]BaseURL
-	env       Destination
-	keyConfig OkxKeyConfig
-	proxy     func(req *http.Request) (*url.URL, error)
+	pc          *PublicClient
+	bc          *BusinessClient
+	pvc         *PrivateClient
+	rc          *PublicRestClient
+	wsUrls      map[Destination]map[SvcType]BaseURL
+	restUrls    map[Destination]BaseURL
+	env         Destination
+	keyConfig   OkxKeyConfig
+	proxy       func(req *http.Request) (*url.URL, error)
+	log         api.ILogger
+	readMonitor func(arg Arg)
 }
 
-func (w ExchangeClient) GetMarketName() string {
+func (w *ExchangeClient) GetMarketName() string {
 	return "okex"
 }
 
-func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (*api.PlaceOrder, error) {
+func (w *ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (*api.PlaceOrder, error) {
 	order, err := w.rc.PlaceOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.ClOrdID,
@@ -50,7 +52,7 @@ func (w ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (
 	}, nil
 }
 
-func (w ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*api.Order, error) {
+func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*api.Order, error) {
 	order, err := w.rc.GetOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.OrderId,
@@ -77,7 +79,7 @@ func (w ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*a
 	}, nil
 }
 
-func (w ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId string) error {
+func (w *ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId string) error {
 	_, err := w.rc.CancelOrder(ctx, tokenType, orderId)
 	if err != nil {
 		return err
@@ -85,7 +87,7 @@ func (w ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId stri
 	return nil
 }
 
-func (w ExchangeClient) QueryCandles(ctx context.Context, req api.CandlesReq) ([]*api.Candle, error) {
+func (w *ExchangeClient) QueryCandles(ctx context.Context, req api.CandlesReq) ([]*api.Candle, error) {
 	candles, err := w.rc.Candles(ctx, CandlesticksReq{
 		InstID: req.TokenType,
 		Before: req.StartTime.UnixMilli(),
@@ -118,7 +120,7 @@ func (w ExchangeClient) QueryCandles(ctx context.Context, req api.CandlesReq) ([
 	return res, nil
 }
 
-func (w ExchangeClient) AssetListen(ctx context.Context, callback func(resp *api.Asset)) error {
+func (w *ExchangeClient) AssetListen(ctx context.Context, callback func(resp *api.Asset)) error {
 	return w.pvc.Account(ctx, func(resp *WsResp[*Balance]) {
 		for _, balance := range resp.Data {
 			for _, datum := range balance.Details {
@@ -151,7 +153,7 @@ func (w ExchangeClient) CandleListen(ctx context.Context, channel, instId string
 	})
 }
 
-func (w ExchangeClient) MarkPriceListen(ctx context.Context, instId string, callback func(resp *api.MarkPrice)) error {
+func (w *ExchangeClient) MarkPriceListen(ctx context.Context, instId string, callback func(resp *api.MarkPrice)) error {
 	return w.pc.MarkPrice(ctx, instId, func(resp *WsResp[*MarkPrice]) {
 		for _, datum := range resp.Data {
 			t, _ := strconv.Atoi(datum.Ts)
@@ -164,7 +166,7 @@ func (w ExchangeClient) MarkPriceListen(ctx context.Context, instId string, call
 	})
 }
 
-func (w ExchangeClient) OrderListen(ctx context.Context, callback func(resp *api.Order)) error {
+func (w *ExchangeClient) OrderListen(ctx context.Context, callback func(resp *api.Order)) error {
 	return w.pvc.SpotOrders(ctx, func(resp *WsResp[*Order]) {
 		for _, datum := range resp.Data {
 			timestampString := datum.FillTime
@@ -185,7 +187,7 @@ func (w ExchangeClient) OrderListen(ctx context.Context, callback func(resp *api
 	})
 }
 
-func (w ExchangeClient) ReadMonitor(readMonitor func(arg string)) {
+func (w *ExchangeClient) ReadMonitor(readMonitor func(arg string)) {
 	f := func(arg Arg) {
 		valueOfArg := reflect.ValueOf(arg)
 		strs := make([]string, 0, valueOfArg.NumField())
@@ -197,23 +199,21 @@ func (w ExchangeClient) ReadMonitor(readMonitor func(arg string)) {
 		}
 		readMonitor(strings.Join(strs, ":"))
 	}
-	w.pc.ReadMonitor = f
-	w.bc.ReadMonitor = f
-	w.pvc.ReadMonitor = f
+	w.readMonitor = f
 }
 
-func (w ExchangeClient) SetLog(log api.ILogger) {
-	w.pc.Log = log
-	w.bc.Log = log
-	w.pvc.Log = log
+func (w *ExchangeClient) SetLog(log api.ILogger) {
+	w.log = log
 }
 
 func NewExchangeClient(ctx context.Context, opts ...api.Opt) (*ExchangeClient, error) {
 	client := ExchangeClient{
-		proxy:    http.ProxyFromEnvironment,
-		wsUrls:   DefaultWsUrls,
-		restUrls: DefaultRestUrl,
-		env:      NormalServer,
+		proxy:       http.ProxyFromEnvironment,
+		wsUrls:      DefaultWsUrls,
+		restUrls:    DefaultRestUrl,
+		env:         NormalServer,
+		log:         api.DefaultLogger{},
+		readMonitor: func(arg Arg) {},
 	}
 	for _, opt := range opts {
 		opt(&client)
@@ -221,9 +221,30 @@ func NewExchangeClient(ctx context.Context, opts ...api.Opt) (*ExchangeClient, e
 	if client.keyConfig.Apikey == "" {
 		return nil, errors.New("not config: Apikey or Secretkey or Passphrase")
 	}
-	client.pc = &PublicClient{BaseWsClient: NewBaseWsClient(ctx, Public, client.wsUrls[client.env][Public], client.keyConfig, client.proxy)}
-	client.bc = &BusinessClient{BaseWsClient: NewBaseWsClient(ctx, Business, client.wsUrls[client.env][Business], client.keyConfig, client.proxy)}
-	client.pvc = &PrivateClient{BaseWsClient: NewBaseWsClient(ctx, Private, client.wsUrls[client.env][Private], client.keyConfig, client.proxy)}
+	client.pc = &PublicClient{BaseWsClient: *NewBaseWsClient(ctx, WsInfo{
+		typ:         Public,
+		url:         client.wsUrls[client.env][Public],
+		keyConfig:   client.keyConfig,
+		proxy:       client.proxy,
+		log:         client.log,
+		readMonitor: client.readMonitor,
+	})}
+	client.bc = &BusinessClient{BaseWsClient: *NewBaseWsClient(ctx, WsInfo{
+		typ:         Business,
+		url:         client.wsUrls[client.env][Business],
+		keyConfig:   client.keyConfig,
+		proxy:       client.proxy,
+		log:         client.log,
+		readMonitor: client.readMonitor,
+	})}
+	client.pvc = &PrivateClient{BaseWsClient: *NewBaseWsClient(ctx, WsInfo{
+		typ:         Private,
+		url:         client.wsUrls[client.env][Private],
+		keyConfig:   client.keyConfig,
+		proxy:       client.proxy,
+		log:         client.log,
+		readMonitor: client.readMonitor,
+	})}
 	client.rc = &PublicRestClient{RestClient: NewRestClient(ctx, client.keyConfig, client.env, client.restUrls, client.proxy)}
 	return &client, nil
 }
