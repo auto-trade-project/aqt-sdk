@@ -23,8 +23,8 @@ type IMarketClient interface {
 
 type IMarketStreamClient interface {
 	AssetListen(ctx context.Context, callback func(resp *Asset)) error
-	CandleListen(ctx context.Context, channel, tokenType string, callback func(resp *Candle)) error
-	MarkPriceListen(ctx context.Context, instId string, callback func(resp *MarkPrice)) error
+	CandleListen(ctx context.Context, timeFrame time.Duration, tokenType string, callback func(resp *Candle)) error
+	MarkPriceListen(ctx context.Context, tokenType string, callback func(resp *MarkPrice)) error
 	OrderListen(ctx context.Context, callback func(resp *Order)) error
 }
 type IMarketUnaryClient interface {
@@ -133,7 +133,7 @@ type CandlesReq struct {
 	EndTime   time.Time
 	StartTime time.Time
 	Limit     int64
-	Norm      string
+	TimeFrame time.Duration
 }
 type Opt func(api IMarketClient)
 

@@ -32,7 +32,7 @@ func TestNewWsClient(t *testing.T) {
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.CandleListen(context.Background(), "15m", "JUP-USDT", func(resp *api.Candle) {
+		if err := client.CandleListen(context.Background(), time.Minute*15, "JUP-USDT", func(resp *api.Candle) {
 			t.Log(resp)
 			cond.L.Lock()
 			count--

@@ -93,7 +93,7 @@ func (w *ExchangeClient) QueryCandles(ctx context.Context, req api.CandlesReq) (
 		Before: req.StartTime.UnixMilli(),
 		After:  req.EndTime.UnixMilli(),
 		Limit:  req.Limit,
-		Bar:    req.Norm,
+		Bar:    w.TimeFrameToBar(req.TimeFrame),
 	})
 	if err != nil {
 		return nil, err
@@ -135,12 +135,44 @@ func (w *ExchangeClient) AssetListen(ctx context.Context, callback func(resp *ap
 	})
 }
 
-func (w ExchangeClient) CandleListen(ctx context.Context, channel, instId string, callback func(resp *api.Candle)) error {
-	return w.bc.Candle(ctx, channel, instId, func(resp *WsResp[*Candle]) {
+const (
+	Bar1m  = "1m"
+	Bar15m = "15m"
+	Bar1H  = "1H"
+	Bar4H  = "4H"
+	Bar1D  = "1D"
+
+	TimeFrame1m  = time.Minute
+	TimeFrame15m = time.Minute * 15
+	TimeFrame1H  = time.Hour
+	TimeFrame4H  = time.Hour * 4
+	TimeFrame1D  = time.Hour * 24
+)
+
+// TimeFrameToBar 将时间周期转换为k线图时间周期
+func (w ExchangeClient) TimeFrameToBar(timeFrame time.Duration) string {
+	bar := Bar1H
+	switch {
+	case timeFrame <= TimeFrame1m:
+		bar = Bar1m
+	case timeFrame <= TimeFrame15m:
+		bar = Bar15m
+	case timeFrame <= TimeFrame1H:
+		bar = Bar1H
+	case timeFrame <= TimeFrame4H:
+		bar = Bar4H
+	case timeFrame <= TimeFrame1D:
+		bar = Bar1D
+	}
+	return bar
+}
+
+func (w ExchangeClient) CandleListen(ctx context.Context, timeFrame time.Duration, tokenType string, callback func(resp *api.Candle)) error {
+	return w.bc.Candle(ctx, w.TimeFrameToBar(timeFrame), tokenType, func(resp *WsResp[*Candle]) {
 		for _, datum := range resp.Data {
 			timestampInt, _ := strconv.ParseInt(datum.Ts, 10, 64)
 			callback(&api.Candle{
-				TokenType: instId,
+				TokenType: tokenType,
 				Ts:        time.UnixMilli(timestampInt),
 				O:         datum.O,
 				H:         datum.H,
@@ -153,13 +185,13 @@ func (w ExchangeClient) CandleListen(ctx context.Context, channel, instId string
 	})
 }
 
-func (w *ExchangeClient) MarkPriceListen(ctx context.Context, instId string, callback func(resp *api.MarkPrice)) error {
-	return w.pc.MarkPrice(ctx, instId, func(resp *WsResp[*MarkPrice]) {
+func (w *ExchangeClient) MarkPriceListen(ctx context.Context, tokenType string, callback func(resp *api.MarkPrice)) error {
+	return w.pc.MarkPrice(ctx, tokenType, func(resp *WsResp[*MarkPrice]) {
 		for _, datum := range resp.Data {
 			t, _ := strconv.Atoi(datum.Ts)
 			callback(&api.MarkPrice{
 				Px:        datum.MarkPx,
-				TokenType: instId,
+				TokenType: tokenType,
 				Ts:        time.UnixMilli(int64(t)),
 			})
 		}
