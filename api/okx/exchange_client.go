@@ -139,12 +139,14 @@ const (
 	Bar1m  = "1m"
 	Bar15m = "15m"
 	Bar1H  = "1H"
+	Bar2H  = "2H"
 	Bar4H  = "4H"
 	Bar1D  = "1D"
 
 	TimeFrame1m  = time.Minute
 	TimeFrame15m = time.Minute * 15
 	TimeFrame1H  = time.Hour
+	TimeFrame2H  = time.Hour * 2
 	TimeFrame4H  = time.Hour * 4
 	TimeFrame1D  = time.Hour * 24
 )
@@ -159,6 +161,8 @@ func (w ExchangeClient) TimeFrameToBar(timeFrame time.Duration) string {
 		bar = Bar15m
 	case timeFrame <= TimeFrame1H:
 		bar = Bar1H
+	case timeFrame <= TimeFrame2H:
+		bar = Bar2H
 	case timeFrame <= TimeFrame4H:
 		bar = Bar4H
 	case timeFrame <= TimeFrame1D:
