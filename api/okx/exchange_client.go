@@ -36,13 +36,16 @@ func (w *ExchangeClient) GetMarketName() string {
 }
 
 func (w *ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (*api.PlaceOrder, error) {
+	if w.isCopyTrading && req.TdMode == "cash" {
+		req.TdMode = "spot_isolated"
+	}
 	order, err := w.rc.PlaceOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
 		ClOrdID: req.ClOrdID,
 		Sz:      req.Sz,
 		Px:      req.Px,
 		Side:    req.Side,
-		TdMode:  "cash",
+		TdMode:  req.TdMode,
 		OrdType: req.OrdType,
 	})
 	if err != nil {
