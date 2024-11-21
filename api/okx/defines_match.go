@@ -28,7 +28,7 @@ func MatchNormType(env EnvType, channelName string) (NormType, error) {
 
 func GetNormType(env EnvType, name string) (NormType, error) {
 	channels := matchByEnv(env)
-	for n, _ := range channels {
+	for n := range channels {
 		if string(n) == name {
 			return n, nil
 		}

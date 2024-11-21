@@ -14,10 +14,11 @@ import (
 )
 
 type ExchangeClient struct {
-	pc          *PublicClient
-	bc          *BusinessClient
-	pvc         *PrivateClient
-	rc          *PublicRestClient
+	pc  *PublicClient
+	bc  *BusinessClient
+	pvc *PrivateClient
+	rc  *PublicRestClient
+
 	wsUrls      map[Destination]map[SvcType]BaseURL
 	restUrls    map[Destination]BaseURL
 	env         Destination
@@ -25,6 +26,9 @@ type ExchangeClient struct {
 	proxy       func(req *http.Request) (*url.URL, error)
 	log         api.ILogger
 	readMonitor func(arg Arg)
+
+	// 是否为带单交易
+	isCopyTrading bool
 }
 
 func (w *ExchangeClient) GetMarketName() string {

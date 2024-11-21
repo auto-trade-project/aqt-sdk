@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -20,8 +19,6 @@ type RestClient struct {
 	cancel    context.CancelFunc
 	keyConfig OkxKeyConfig
 	isTest    bool
-	limitReq  int
-	locker    sync.RWMutex
 }
 
 func NewRestClient(ctx context.Context, keyConfig OkxKeyConfig, env Destination, urls map[Destination]BaseURL, proxy func(req *http.Request) (*url.URL, error)) RestClient {

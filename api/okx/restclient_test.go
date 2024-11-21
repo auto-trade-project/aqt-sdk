@@ -7,22 +7,20 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/kurosann/aqt-sdk/api"
 )
 
 func TestGetCandlesticks(t *testing.T) {
-	client := newClient()
+	client := NewRestClient(context.Background(), OkxKeyConfig{}, TestServer, DefaultRestUrl, nil)
 	today := time.Now()
 	todayZero := time.Date(today.Year(), today.Month(), today.Day(), today.Hour(), 0, 0, 0, today.Location())
 	rp, err := client.Candles(
 		context.Background(),
-		api.CandlesReq{
-			TokenType: "BTC-USDT",
-			EndTime:   time.Now(),
-			StartTime: todayZero.Add(time.Duration(-3*24) * time.Hour),
-			Norm:      "15m",
-			Limit:     100,
+		CandlesticksReq{
+			InstID: "BTC-USDT",
+			Before: time.Now().UnixMilli(),
+			After:  todayZero.Add(time.Duration(-3*24) * time.Hour).UnixMilli(),
+			Bar:    "15m",
+			Limit:  100,
 		})
 	if err != nil {
 		assert.Fail(t, err.Error())

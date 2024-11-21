@@ -50,6 +50,16 @@ func WithRestEndpoints(urls map[Destination]BaseURL) api.Opt {
 		}
 	}
 }
+
+// WithCopyTrading 复制交易
+func WithCopyTrading(isCopyTrading bool) api.Opt {
+	return func(api api.IMarketClient) {
+		if client, ok := api.(*ExchangeClient); ok {
+			client.isCopyTrading = isCopyTrading
+		}
+	}
+}
+
 func UseOkxExchange(opts ...api.Opt) api.OptInfo {
 	return api.NewOptInfo(api.OkxExchange, opts...)
 }

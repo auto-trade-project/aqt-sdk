@@ -21,14 +21,12 @@ const (
 )
 
 type WsInfo struct {
-	typ               SvcType
-	url               BaseURL
-	keyConfig         OkxKeyConfig
-	proxy             func(req *http.Request) (*url.URL, error)
-	readMonitor       func(arg Arg)
-	log               api.ILogger
-	reconnectAttempts int
-	keepAliveTimeout  time.Duration
+	typ         SvcType
+	url         BaseURL
+	keyConfig   OkxKeyConfig
+	proxy       func(req *http.Request) (*url.URL, error)
+	readMonitor func(arg Arg)
+	log         api.ILogger
 }
 
 type BaseWsClient struct {
