@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -12,11 +13,18 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var (
+	ErrConnClosed    = errors.New("connection closed")
+	ErrWriteTimeout  = errors.New("write timeout")
+	ErrReadTimeout   = errors.New("read timeout")
+	ErrInvalidStatus = errors.New("invalid connection status")
+)
+
 type Status string
 
 const (
-	Alive = "alive"
-	Dead  = "dead"
+	Alive Status = "alive"
+	Dead  Status = "dead"
 )
 
 type MsgType int
@@ -27,42 +35,77 @@ const (
 	CloseMessage  MsgType = 8
 	PingMessage   MsgType = 9
 	PongMessage   MsgType = 10
+
+	defaultWriteTimeout     = 3 * time.Second
+	defaultKeepaliveTimeout = 30 * time.Second
+	defaultPingInterval     = 20 * time.Second // keepaliveTimeout - 10s
 )
 
 // Conn ws连接
 type Conn struct {
-	ctx               context.Context
-	cancel            context.CancelCauseFunc
-	Status            Status
-	conn              *websocket.Conn
-	dataCh            map[string]chan Data
-	lock              sync.RWMutex
-	proxy             func(req *http.Request) (*url.URL, error)
-	writeTimeout      time.Duration // 写入超时时间
-	mt                MsgType       // 连接使用的消息类型
-	keepaliveFn       func(*Conn) error
-	keepaliveListenFn func([]byte) bool
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+
+	mu     sync.RWMutex
+	status Status
+	conn   *websocket.Conn
+	dataCh map[string]chan Data
+
+	config connConfig
 }
 
-// DialContext 拨号 使用context控制
+type connConfig struct {
+	proxy            func(req *http.Request) (*url.URL, error)
+	writeTimeout     time.Duration
+	keepaliveTimeout time.Duration
+	msgType          MsgType
+	keepalivePingFn  func(*Conn) error
+	keepalivePongFn  func([]byte) bool
+}
+
+type Data struct {
+	Type MsgType
+	Data []byte
+}
+
+// NewConn 创建新的websocket连接
 func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
+
 	c := &Conn{
-		ctx:               ctx,
-		cancel:            cancel,
-		Status:            Alive,
-		dataCh:            map[string]chan Data{},
-		writeTimeout:      time.Second * 3,
-		mt:                TextMessage,
-		keepaliveFn:       func(conn *Conn) error { return nil },
-		keepaliveListenFn: func(bytes []byte) bool { return true },
+		ctx:    ctx,
+		cancel: cancel,
+		status: Alive,
+		dataCh: make(map[string]chan Data),
+		config: connConfig{
+			writeTimeout:     defaultWriteTimeout,
+			keepaliveTimeout: defaultKeepaliveTimeout,
+			msgType:          TextMessage,
+			keepalivePingFn:  func(conn *Conn) error { return nil },
+			keepalivePongFn:  func(bytes []byte) bool { return true },
+		},
 	}
+
+	// 应用选项
 	for _, opt := range opts {
 		opt(c)
 	}
+
+	if err := c.dial(address); err != nil {
+		return nil, fmt.Errorf("dial websocket: %w", err)
+	}
+
+	// 启动后台任务
+	go c.keepalive()
+	go c.readPump()
+
+	return c, nil
+}
+
+func (c *Conn) dial(address string) error {
 	dialer := websocket.DefaultDialer
-	if c.proxy != nil {
-		dialer.Proxy = c.proxy
+	if c.config.proxy != nil {
+		dialer.Proxy = c.config.proxy
 	}
 	dialer.TLSClientConfig = &tls.Config{
 		MinVersion: tls.VersionTLS13,
@@ -70,92 +113,129 @@ func DialContext(ctx context.Context, address string, opts ...Option) (*Conn, er
 
 	header := http.Header{}
 	header.Add("User-Agent", "Go websockets/13.0")
-	conn, rp, err := dialer.DialContext(ctx, address, header)
+
+	conn, resp, err := dialer.DialContext(c.ctx, address, header)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if rp.StatusCode != 101 {
-		return nil, fmt.Errorf("connect response err: %v", rp)
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
+
 	c.conn = conn
-	go c.keepalive()
-	go c.read()
-	return c, nil
+	return nil
 }
 
 func (c *Conn) Context() context.Context {
 	return c.ctx
 }
+
+func (c *Conn) Status() Status {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.status
+}
+
 func (c *Conn) Close(err error) {
-	c.cancel(err)
-	c.Status = Dead
-	_ = c.conn.Close()
-}
-func (c *Conn) SetKeepAlive(keepaliveFn func(conn *Conn) error, keepaliveListenFn func(data []byte) bool) {
-	c.keepaliveFn = keepaliveFn
-	c.keepaliveListenFn = keepaliveListenFn
-}
-
-// keepalive
-func (c *Conn) keepalive() {
-	c.conn.SetPongHandler(func(appData string) error {
-		c.Status = Alive
-		return nil
-	})
-	for {
-		if c.Status == Dead {
-			return
-		}
-		err := c.conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(time.Second*3))
-		if err != nil {
-			c.Close(err)
-			return
-		}
-		err = c.keepaliveFn(c)
-		if err != nil {
-			c.Close(err)
-			return
-		}
-		time.Sleep(time.Second * 20)
+	c.mu.Lock()
+	if c.status == Dead {
+		c.mu.Unlock()
+		return
 	}
-}
+	c.status = Dead
+	c.mu.Unlock()
 
-type Data struct {
-	Typ  MsgType
-	Data []byte
-}
+	c.cancel(err)
+	_ = c.conn.Close()
 
-// RegisterWatch 注册监听
-func (c *Conn) RegisterWatch(id string) <-chan Data {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	data := make(chan Data, 1)
-	c.dataCh[id] = data
-	return data
-}
-
-// UnregisterWatch 注销监听
-func (c *Conn) UnregisterWatch(id string) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	// 关闭、通知并回收资源
-	if ch, ok := c.dataCh[id]; ok {
+	// 关闭所有数据通道
+	c.mu.Lock()
+	for _, ch := range c.dataCh {
 		close(ch)
 	}
-	delete(c.dataCh, id)
+	c.dataCh = nil
+	c.mu.Unlock()
 }
 
-// Write 写入数据
-func (c *Conn) Write(data []byte) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	_ = c.conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
-	err := c.conn.WriteMessage(int(c.mt), data)
+// keepalive 心跳保活
+func (c *Conn) keepalive() {
+	ticker := time.NewTicker(defaultPingInterval)
+	defer ticker.Stop()
+
+	c.conn.SetPongHandler(func(string) error {
+		c.mu.Lock()
+		c.status = Alive
+		c.mu.Unlock()
+		return nil
+	})
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+			if c.Status() == Dead {
+				return
+			}
+			if err := c.ping(); err != nil {
+				c.Close(fmt.Errorf("ping failed: %w", err))
+				return
+			}
+		}
+	}
+}
+
+func (c *Conn) ping() error {
+	deadline := time.Now().Add(c.config.writeTimeout)
+	err := c.conn.WriteControl(websocket.PingMessage, []byte("ping"), deadline)
 	if err != nil {
-		if context.Cause(c.ctx) != nil {
-			err = context.Cause(c.ctx)
+		return err
+	}
+	return c.config.keepalivePingFn(c)
+}
+
+// RegisterWatch 注册消息监听
+func (c *Conn) RegisterWatch(id string) (<-chan Data, error) {
+	if c.Status() == Dead {
+		return nil, ErrConnClosed
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	ch := make(chan Data, 1)
+	c.dataCh[id] = ch
+	return ch, nil
+}
+
+// UnregisterWatch 注销消息监听
+func (c *Conn) UnregisterWatch(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if ch, exists := c.dataCh[id]; exists {
+		close(ch)
+		delete(c.dataCh, id)
+	}
+}
+
+// Write 发送消息
+func (c *Conn) Write(data []byte) error {
+	if c.Status() == Dead {
+		return ErrConnClosed
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	deadline := time.Now().Add(c.config.writeTimeout)
+	if err := c.conn.SetWriteDeadline(deadline); err != nil {
+		return fmt.Errorf("set write deadline: %w", err)
+	}
+
+	if err := c.conn.WriteMessage(int(c.config.msgType), data); err != nil {
+		if ctxErr := context.Cause(c.ctx); ctxErr != nil {
+			err = ctxErr
 		}
 		c.Close(err)
 		return err
@@ -163,34 +243,43 @@ func (c *Conn) Write(data []byte) error {
 	return nil
 }
 
-// 读取数据流
-func (c *Conn) read() {
+// readPump 读取消息泵
+func (c *Conn) readPump() {
 	for {
-		// 并发控制
 		select {
 		case <-c.ctx.Done():
 			return
 		default:
-		}
-		mt, data, err := c.conn.ReadMessage()
-		if err != nil {
-			c.Status = Dead
-			c.cancel(err)
-			_ = c.conn.Close()
-			return
-		}
-		if c.keepaliveListenFn(data) {
-			c.Status = Alive
-			continue
-		}
-		// 写入已注册的监听中
-		c.lock.RLock()
-		for _, ch := range c.dataCh {
-			ch <- Data{
-				Typ:  MsgType(mt),
-				Data: data,
+			if err := c.readMessage(); err != nil {
+				c.Close(err)
+				return
 			}
 		}
-		c.lock.RUnlock()
 	}
+}
+
+func (c *Conn) readMessage() error {
+	if err := c.conn.SetReadDeadline(time.Now().Add(c.config.keepaliveTimeout)); err != nil {
+		return fmt.Errorf("set read deadline: %w", err)
+	}
+
+	msgType, data, err := c.conn.ReadMessage()
+	if err != nil {
+		return fmt.Errorf("read message: %w", err)
+	}
+
+	if c.config.keepalivePongFn(data) {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.status = Alive
+		return nil
+	}
+
+	c.mu.RLock()
+	for _, ch := range c.dataCh {
+		ch <- Data{Type: MsgType(msgType), Data: data}
+	}
+	c.mu.RUnlock()
+
+	return nil
 }

@@ -9,47 +9,34 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/kurosann/aqt-sdk/api/common"
 )
 
 type RestClient struct {
-	baseUrl   common.BaseURL
+	baseUrl   BaseURL
 	ctx       context.Context
 	client    *http.Client
 	cancel    context.CancelFunc
-	keyConfig KeyConfig
+	keyConfig OkxKeyConfig
 	isTest    bool
-	limitReq  int
-	locker    sync.RWMutex
 }
 
-func NewRestClient(ctx context.Context, keyConfig KeyConfig, env common.Destination, proxy ...string) *RestClient {
-	return NewRestClientWithCustom(ctx, keyConfig, env, common.DefaultRestUrl, proxy...)
-}
-
-func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env common.Destination, urls map[common.Destination]common.BaseURL, proxy ...string) *RestClient {
+func NewRestClient(ctx context.Context, keyConfig OkxKeyConfig, env Destination, urls map[Destination]BaseURL, proxy func(req *http.Request) (*url.URL, error)) RestClient {
 	ctx, cancel := context.WithCancel(ctx)
 	baseUrl, ok := urls[env]
 	if !ok {
 		panic("not support env")
 	}
 	proxyURL := http.ProxyFromEnvironment
-	if len(proxy) != 0 && proxy[0] != "" {
-		parse, err := url.Parse(proxy[0])
-		if err != nil {
-			panic(err.Error())
-		}
-		proxyURL = http.ProxyURL(parse)
+	if proxy != nil {
+		proxyURL = proxy
 	}
-	return &RestClient{
+	return RestClient{
 		ctx:       ctx,
 		cancel:    cancel,
 		baseUrl:   baseUrl,
 		keyConfig: keyConfig,
-		isTest:    env == common.TestServer,
+		isTest:    env == TestServer,
 		client: &http.Client{
 			Transport: &http.Transport{
 				Proxy: proxyURL,
@@ -58,13 +45,13 @@ func NewRestClientWithCustom(ctx context.Context, keyConfig KeyConfig, env commo
 		}}
 }
 
-func Get[T any](c *RestClient, ctx context.Context, url string, params interface{}) (*common.Resp[T], error) {
+func Get[T any](c *RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
 	return Do[T](c, c.MakeRequest(ctx, http.MethodGet, url, params))
 }
-func Post[T any](c *RestClient, ctx context.Context, url string, params interface{}) (*common.Resp[T], error) {
+func Post[T any](c *RestClient, ctx context.Context, url string, params interface{}) (*Resp[T], error) {
 	return Do[T](c, c.MakeRequest(ctx, http.MethodPost, url, params))
 }
-func Do[T any](c *RestClient, req *http.Request) (*common.Resp[T], error) {
+func Do[T any](c *RestClient, req *http.Request) (*Resp[T], error) {
 	rp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -76,7 +63,7 @@ func Do[T any](c *RestClient, req *http.Request) (*common.Resp[T], error) {
 	if rp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%v %v, statusCode is %v, msg: %v", req.Method, req.URL.String(), rp.StatusCode, string(bs))
 	}
-	t, err := common.Unmarshal[common.Resp[T]](bs)
+	t, err := Unmarshal[Resp[T]](bs)
 	if err != nil {
 		return nil, err
 	}

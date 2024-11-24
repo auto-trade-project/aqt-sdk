@@ -1,10 +1,9 @@
-package common
+package okx
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 )
 
@@ -13,6 +12,13 @@ type (
 	BaseURL     string
 )
 
+type SvcType string
+
+const (
+	Public   SvcType = "Public"
+	Private  SvcType = "Private"
+	Business SvcType = "Business"
+)
 const (
 	NormalServer Destination = iota
 	AwsServer
@@ -21,17 +27,17 @@ const (
 	RestURL       = BaseURL("https://www.okx.com")
 	PublicWsURL   = BaseURL("wss://ws.okx.com:8443/ws/v5/public")
 	PrivateWsURL  = BaseURL("wss://ws.okx.com:8443/ws/v5/private")
-	BusinessWsURL = BaseURL("wss://ws.okx.com:8443/ws/v5/business?brokerId=9999")
+	BusinessWsURL = BaseURL("wss://ws.okx.com:8443/ws/v5/business")
 
 	AwsRestURL       = BaseURL("https://aws.okx.com")
 	AwsPublicWsURL   = BaseURL("wss://wsaws.okx.com:8443/ws/v5/public")
 	AwsPrivateWsURL  = BaseURL("wss://wsaws.okx.com:8443/ws/v5/private")
-	AwsBusinessWsURL = BaseURL("wss://wsaws.okx.com:8443/ws/v5/business?brokerId=9999")
+	AwsBusinessWsURL = BaseURL("wss://wsaws.okx.com:8443/ws/v5/business")
 
 	TestRestURL       = BaseURL("https://www.okx.com")
-	TestPublicWsURL   = BaseURL("wss://wspap.okx.com:8443/ws/v5/public?brokerId=9999")
-	TestPrivateWsURL  = BaseURL("wss://wspap.okx.com:8443/ws/v5/private?brokerId=9999")
-	TestBusinessWsURL = BaseURL("wss://wspap.okx.com:8443/ws/v5/business?brokerId=9999")
+	TestPublicWsURL   = BaseURL("wss://wspap.okx.com:8443/ws/v5/public")
+	TestPrivateWsURL  = BaseURL("wss://wspap.okx.com:8443/ws/v5/private")
+	TestBusinessWsURL = BaseURL("wss://wspap.okx.com:8443/ws/v5/business")
 )
 
 var (
@@ -83,12 +89,6 @@ func (m *RawMessage) UnmarshalJSON(data []byte) error {
 	}
 	*m = append((*m)[0:0], data...)
 	return nil
-}
-
-type IKeyConfig interface {
-	MakeHeader(method, requestPath string, body []byte) http.Header
-	MakeWsSign() map[string]string
-	MakeSign(now, method, requestPath string, body []byte) (sign string)
 }
 
 type SubChannel struct {

@@ -1,4 +1,4 @@
-package okx
+package exchange
 
 import (
 	"context"
@@ -8,26 +8,32 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/kurosann/aqt-sdk/api/common"
+	"github.com/kurosann/aqt-sdk/api"
+	"github.com/kurosann/aqt-sdk/api/okx"
 )
 
-var config = KeyConfig{
+var config = okx.OkxKeyConfig{
 	"",
 	"",
 	"",
 }
 
-func TestNewWsClient(t *testing.T) {
-	client := NewWsClient(
-		context.Background(),
-		config,
-		common.TestServer,
+func newClient() api.IMarketClient {
+	client, _ := NewMarketApi(context.Background(),
+		okx.UseOkxExchange(
+			okx.WithConfig(config),
+			okx.WithEnv(okx.NormalServer),
+		),
 	)
+	return client
+}
+func TestNewWsClient(t *testing.T) {
+	client := newClient()
 	count := 200
 	cond := sync.NewCond(&sync.RWMutex{})
 	go func() {
-		if err := client.Account(context.Background(), func(resp *common.WsResp[*common.Balance]) {
-			t.Log(resp.Data[0].Details)
+		if err := client.CandleListen(context.Background(), time.Minute*15, "JUP-USDT", func(resp *api.Candle) {
+			t.Log(resp)
 			cond.L.Lock()
 			count--
 			cond.Broadcast()
@@ -36,7 +42,7 @@ func TestNewWsClient(t *testing.T) {
 			assert.Fail(t, err.Error())
 			return
 		}
-		//if err := client.MarkPrice("SOL-USDT", func(resp *WsResp[*MarkPrice]) {
+		//if err := client.MarkPriceListen("SOL-USDT", func(resp *WsResp[*MarkPriceListen]) {
 		//	t.Log(*resp)
 		//	cond.L.Lock()
 		//	count--
@@ -48,7 +54,7 @@ func TestNewWsClient(t *testing.T) {
 		//}
 	}()
 	//go func() {
-	//	ch, err := client.MarkPrice("BTC-USDT")
+	//	ch, err := client.MarkPriceListen("BTC-USDT")
 	//	if err != nil {
 	//		assert.Fail(t, err.Error())
 	//		return

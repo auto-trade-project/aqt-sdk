@@ -10,13 +10,13 @@ import (
 	"time"
 )
 
-type KeyConfig struct {
+type OkxKeyConfig struct {
 	Apikey     string
 	Secretkey  string
 	Passphrase string
 }
 
-func (c KeyConfig) MakeHeader(method, requestPath string, body []byte) http.Header {
+func (c OkxKeyConfig) MakeHeader(method, requestPath string, body []byte) http.Header {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.999Z")
 	sign := c.MakeSign(now, method, requestPath, body)
 	return map[string][]string{
@@ -27,7 +27,7 @@ func (c KeyConfig) MakeHeader(method, requestPath string, body []byte) http.Head
 	}
 }
 
-func (c KeyConfig) MakeWsSign() map[string]string {
+func (c OkxKeyConfig) MakeWsSign() map[string]string {
 	now := fmt.Sprint(time.Now().UTC().Unix())
 	sign := c.MakeSign(now, http.MethodGet, "/users/self/verify", []byte(""))
 	return map[string]string{
@@ -37,7 +37,7 @@ func (c KeyConfig) MakeWsSign() map[string]string {
 		"passphrase": c.Passphrase,
 	}
 }
-func (c KeyConfig) MakeSign(now, method, requestPath string, body []byte) (sign string) {
+func (c OkxKeyConfig) MakeSign(now, method, requestPath string, body []byte) (sign string) {
 	method = strings.ToUpper(method)
 	hash := hmac.New(sha256.New, []byte(c.Secretkey))
 	hash.Write(append([]byte(now+method+requestPath), body...))
