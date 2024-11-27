@@ -102,16 +102,25 @@ type Asset struct {
 	FrozenBal string
 }
 
+type OrderState string
+
+const (
+	OrderStateOpen            OrderState = "open"             // 未成交
+	OrderStateCanceled        OrderState = "canceled"         // 撤单成功
+	OrderStatePartiallyFilled OrderState = "partially_filled" // 部分成交
+	OrderStateFilled          OrderState = "filled"           // 完全成交
+)
+
 type Order struct {
-	TokenType  string
-	PlmOrderId string // 平台订单id
-	SysOrderId string // 系统订单id
-	Side       string
-	Fee        string
-	Px         string
-	Sz         string
-	State      string
-	Time       time.Time
+	TokenType       string
+	ExOrderId       string // 交易所订单id
+	InternalOrderId string // 程序内部订单id
+	Side            string
+	Fee             string
+	Px              string
+	Sz              string
+	State           OrderState
+	Time            time.Time
 }
 type PlaceOrderReq struct {
 	TokenType string

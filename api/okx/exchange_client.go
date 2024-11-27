@@ -65,21 +65,21 @@ func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*
 		return nil, err
 	}
 	if len(order.Data) == 0 {
-		return nil, nil
+		return nil, errors.New("order not found")
 	}
 	timestampString := order.Data[0].CTime
 	// 将时间戳字符串转换为整数
 	timestampInt, _ := strconv.ParseInt(timestampString, 10, 64)
 	return &api.Order{
-		TokenType:  order.Data[0].InstId,
-		PlmOrderId: order.Data[0].OrdId,
-		SysOrderId: order.Data[0].ClOrdId,
-		Side:       order.Data[0].Side,
-		Fee:        order.Data[0].Fee,
-		Px:         order.Data[0].Px,
-		Sz:         order.Data[0].Sz,
-		State:      order.Data[0].State,
-		Time:       time.UnixMilli(timestampInt),
+		TokenType:       order.Data[0].InstId,
+		ExOrderId:       order.Data[0].OrdId,
+		InternalOrderId: order.Data[0].ClOrdId,
+		Side:            order.Data[0].Side,
+		Fee:             order.Data[0].Fee,
+		Px:              order.Data[0].Px,
+		Sz:              order.Data[0].Sz,
+		State:           stateToOrderState(order.Data[0].State),
+		Time:            time.UnixMilli(timestampInt),
 	}, nil
 }
 
@@ -213,18 +213,31 @@ func (w *ExchangeClient) OrderListen(ctx context.Context, callback func(resp *ap
 			// 将时间戳字符串转换为整数
 			timestampInt, _ := strconv.ParseInt(timestampString, 10, 64)
 			callback(&api.Order{
-				Px:         datum.Px,
-				TokenType:  datum.InstId,
-				PlmOrderId: datum.OrdId,
-				SysOrderId: datum.ClOrdId,
-				Side:       datum.Side,
-				Fee:        datum.Fee,
-				Sz:         datum.Sz,
-				State:      datum.State,
-				Time:       time.UnixMilli(timestampInt),
+				Px:              datum.Px,
+				TokenType:       datum.InstId,
+				ExOrderId:       datum.OrdId,
+				InternalOrderId: datum.ClOrdId,
+				Side:            datum.Side,
+				Fee:             datum.Fee,
+				Sz:              datum.Sz,
+				State:           stateToOrderState(datum.State),
+				Time:            time.UnixMilli(timestampInt),
 			})
 		}
 	})
+}
+func stateToOrderState(state string) api.OrderState {
+	switch state {
+	case "canceled", "mmp_canceled":
+		return api.OrderStateCanceled
+	case "live":
+		return api.OrderStateOpen
+	case "partially_filled":
+		return api.OrderStatePartiallyFilled
+	case "filled":
+		return api.OrderStateFilled
+	}
+	return api.OrderStateOpen
 }
 
 func (w *ExchangeClient) ReadMonitor(readMonitor func(arg string)) {
