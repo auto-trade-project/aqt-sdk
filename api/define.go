@@ -123,12 +123,12 @@ type Order struct {
 	Time            time.Time
 }
 type PlaceOrderReq struct {
-	TokenType string
-	ClOrdID   string
-	Sz        string
-	Px        string
-	Side      string
-	OrdType   string
+	TokenType       string
+	InternalOrderId string
+	Sz              string
+	Px              string
+	Side            string
+	OrdType         string
 }
 type GetOrderReq struct {
 	TokenType string

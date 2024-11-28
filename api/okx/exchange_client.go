@@ -3,6 +3,7 @@ package okx
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -38,7 +39,7 @@ func (w *ExchangeClient) GetMarketName() string {
 func (w *ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) (*api.PlaceOrder, error) {
 	order, err := w.rc.PlaceOrder(ctx, PlaceOrderReq{
 		InstID:  req.TokenType,
-		ClOrdID: req.ClOrdID,
+		ClOrdID: req.InternalOrderId,
 		Sz:      req.Sz,
 		Px:      req.Px,
 		Side:    req.Side,
@@ -46,10 +47,16 @@ func (w *ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) 
 		OrdType: req.OrdType,
 	})
 	if err != nil {
-		return nil, err
+		msgs := make([]string, 0)
+		for _, item := range order.Data {
+			if item.SMsg != "" {
+				msgs = append(msgs, item.SMsg)
+			}
+		}
+		return nil, w.genErrMsg("code:%s %w: %s", order.Code, err, strings.Join(msgs, "; "))
 	}
 	if len(order.Data) == 0 {
-		return nil, nil
+		return nil, w.genErrMsg("place order failed")
 	}
 	return &api.PlaceOrder{
 		OrderId: order.Data[0].OrdId,
@@ -65,7 +72,7 @@ func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*
 		return nil, err
 	}
 	if len(order.Data) == 0 {
-		return nil, errors.New("order not found")
+		return nil, w.genErrMsg("order not found")
 	}
 	timestampString := order.Data[0].CTime
 	// 将时间戳字符串转换为整数
@@ -86,7 +93,7 @@ func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*
 func (w *ExchangeClient) CancelOrder(ctx context.Context, tokenType, orderId string) error {
 	_, err := w.rc.CancelOrder(ctx, tokenType, orderId)
 	if err != nil {
-		return err
+		return w.genErrMsg("cancel order failed: %w", err)
 	}
 	return nil
 }
@@ -100,10 +107,10 @@ func (w *ExchangeClient) QueryCandles(ctx context.Context, req api.CandlesReq) (
 		Bar:    w.TimeFrameToBar(req.TimeFrame),
 	})
 	if err != nil {
-		return nil, err
+		return nil, w.genErrMsg("query candles failed: %w", err)
 	}
 	if len(candles.Data) == 0 {
-		return nil, nil
+		return nil, w.genErrMsg("candles not found")
 	}
 	res := make([]*api.Candle, len(candles.Data))
 	for i, datum := range candles.Data {
@@ -156,7 +163,7 @@ const (
 )
 
 // TimeFrameToBar 将时间周期转换为k线图时间周期
-func (w ExchangeClient) TimeFrameToBar(timeFrame time.Duration) string {
+func (w *ExchangeClient) TimeFrameToBar(timeFrame time.Duration) string {
 	bar := Bar1H
 	switch {
 	case timeFrame <= TimeFrame1m:
@@ -175,8 +182,8 @@ func (w ExchangeClient) TimeFrameToBar(timeFrame time.Duration) string {
 	return bar
 }
 
-func (w ExchangeClient) CandleListen(ctx context.Context, timeFrame time.Duration, tokenType string, callback func(resp *api.Candle)) error {
-	return w.bc.Candle(ctx, w.TimeFrameToBar(timeFrame), tokenType, func(resp *WsResp[*Candle]) {
+func (w *ExchangeClient) CandleListen(ctx context.Context, timeFrame time.Duration, tokenType string, callback func(resp *api.Candle)) error {
+	err := w.bc.Candle(ctx, w.TimeFrameToBar(timeFrame), tokenType, func(resp *WsResp[*Candle]) {
 		for _, datum := range resp.Data {
 			timestampInt, _ := strconv.ParseInt(datum.Ts, 10, 64)
 			callback(&api.Candle{
@@ -191,10 +198,14 @@ func (w ExchangeClient) CandleListen(ctx context.Context, timeFrame time.Duratio
 			})
 		}
 	})
+	if err != nil {
+		return w.genErrMsg("candle listen failed: %w", err)
+	}
+	return nil
 }
 
 func (w *ExchangeClient) MarkPriceListen(ctx context.Context, tokenType string, callback func(resp *api.MarkPrice)) error {
-	return w.pc.MarkPrice(ctx, tokenType, func(resp *WsResp[*MarkPrice]) {
+	err := w.pc.MarkPrice(ctx, tokenType, func(resp *WsResp[*MarkPrice]) {
 		for _, datum := range resp.Data {
 			t, _ := strconv.Atoi(datum.Ts)
 			callback(&api.MarkPrice{
@@ -204,10 +215,14 @@ func (w *ExchangeClient) MarkPriceListen(ctx context.Context, tokenType string, 
 			})
 		}
 	})
+	if err != nil {
+		return w.genErrMsg("mark price listen failed: %w", err)
+	}
+	return nil
 }
 
 func (w *ExchangeClient) OrderListen(ctx context.Context, callback func(resp *api.Order)) error {
-	return w.pvc.SpotOrders(ctx, func(resp *WsResp[*Order]) {
+	err := w.pvc.SpotOrders(ctx, func(resp *WsResp[*Order]) {
 		for _, datum := range resp.Data {
 			timestampString := datum.FillTime
 			// 将时间戳字符串转换为整数
@@ -225,6 +240,10 @@ func (w *ExchangeClient) OrderListen(ctx context.Context, callback func(resp *ap
 			})
 		}
 	})
+	if err != nil {
+		return w.genErrMsg("order listen failed: %w", err)
+	}
+	return nil
 }
 func stateToOrderState(state string) api.OrderState {
 	switch state {
@@ -257,6 +276,10 @@ func (w *ExchangeClient) ReadMonitor(readMonitor func(arg string)) {
 
 func (w *ExchangeClient) SetLog(log api.ILogger) {
 	w.log = log
+}
+
+func (w *ExchangeClient) genErrMsg(format string, args ...any) error {
+	return fmt.Errorf("[%s] "+format, append([]any{w.GetMarketName()}, args...)...)
 }
 
 func NewExchangeClient(ctx context.Context, opts ...api.Opt) (*ExchangeClient, error) {

@@ -65,10 +65,10 @@ func Do[T any](c *RestClient, req *http.Request) (*Resp[T], error) {
 	}
 	t, err := Unmarshal[Resp[T]](bs)
 	if err != nil {
-		return nil, err
+		return t, err
 	}
 	if t.Code != "0" {
-		return nil, fmt.Errorf(t.Msg)
+		return t, fmt.Errorf(t.Msg)
 	}
 	return t, nil
 }
