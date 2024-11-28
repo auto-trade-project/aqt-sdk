@@ -79,8 +79,8 @@ func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*
 		SysOrderId: order.Data[0].ClOrdId,
 		Side:       order.Data[0].Side,
 		Fee:        order.Data[0].Fee,
-		Px:         order.Data[0].Px,
-		Sz:         order.Data[0].Sz,
+		Px:         order.Data[0].FillPx,
+		Sz:         order.Data[0].FillSz,
 		State:      order.Data[0].State,
 		Time:       time.UnixMilli(timestampInt),
 	}, nil
