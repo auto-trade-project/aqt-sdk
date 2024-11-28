@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -51,6 +52,10 @@ type IConnect interface {
 	IsAlive() error
 	Reload() error
 }
+
+var (
+	OrderNotFound = errors.New("order not found")
+)
 
 type ILogger interface {
 	Infof(template string, args ...interface{})

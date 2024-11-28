@@ -47,13 +47,13 @@ func (w *ExchangeClient) PlaceOrder(ctx context.Context, req api.PlaceOrderReq) 
 		OrdType: req.OrdType,
 	})
 	if err != nil {
-		msgs := make([]string, 0)
+		msgs := make([]string, 0, len(order.Data))
+		codes := make([]string, 0, len(order.Data))
 		for _, item := range order.Data {
-			if item.SMsg != "" {
-				msgs = append(msgs, item.SMsg)
-			}
+			codes = append(codes, item.SCode)
+			msgs = append(msgs, item.SMsg)
 		}
-		return nil, w.genErrMsg("code:%s %w: %s", order.Code, err, strings.Join(msgs, "; "))
+		return nil, w.genErrMsg("code:%s %w: %s", strings.Join(codes, "; "), err, strings.Join(msgs, "; "))
 	}
 	if len(order.Data) == 0 {
 		return nil, w.genErrMsg("place order failed")
@@ -69,10 +69,13 @@ func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*
 		ClOrdID: req.OrderId,
 	})
 	if err != nil {
+		if order != nil && order.Code == "51603" {
+			return nil, w.genErrMsg("%w:%w orderId: %s", api.OrderNotFound, order.Msg, req.OrderId)
+		}
 		return nil, err
 	}
 	if len(order.Data) == 0 {
-		return nil, w.genErrMsg("order not found")
+		return nil, w.genErrMsg("%w orderId: %s", api.OrderNotFound, req.OrderId)
 	}
 	timestampString := order.Data[0].CTime
 	// 将时间戳字符串转换为整数
@@ -83,8 +86,8 @@ func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*
 		InternalOrderId: order.Data[0].ClOrdId,
 		Side:            order.Data[0].Side,
 		Fee:             order.Data[0].Fee,
-		Px:              order.Data[0].Px,
-		Sz:              order.Data[0].Sz,
+		Px:              order.Data[0].FillPx,
+		Sz:              order.Data[0].FillSz,
 		State:           stateToOrderState(order.Data[0].State),
 		Time:            time.UnixMilli(timestampInt),
 	}, nil
