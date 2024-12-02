@@ -244,10 +244,13 @@ func Subscribe[T any](c *BaseWsClient, ctx context.Context, arg *Arg, callback f
 		if resp.Event == "subscribe" {
 			return
 		}
+		if resp.Event == "unsubscribe" {
+			return
+		}
 		var t []T
 		err := json.Unmarshal(resp.Data, &t)
 		if err != nil {
-			c.log.Errorf(err.Error())
+			c.log.Errorf("data: %s, err: %s", resp, err.Error())
 			return
 		}
 		callback(&WsResp[T]{
