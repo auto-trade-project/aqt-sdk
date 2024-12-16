@@ -70,7 +70,7 @@ func (w *ExchangeClient) QueryOrder(ctx context.Context, req api.GetOrderReq) (*
 	})
 	if err != nil {
 		if order != nil && order.Code == "51603" {
-			return nil, w.genErrMsg("%w:%w orderId: %s", api.OrderNotFound, order.Msg, req.OrderId)
+			return nil, w.genErrMsg("%w:%s orderId: %s", api.OrderNotFound, order.Msg, req.OrderId)
 		}
 		return nil, err
 	}
