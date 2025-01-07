@@ -134,6 +134,7 @@ type PlaceOrderReq struct {
 	Px              string
 	Side            string
 	OrdType         string
+	TdMode    string
 }
 type GetOrderReq struct {
 	TokenType string
